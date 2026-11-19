@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "packages": [
+    {
+      "path": "db",
+      "engine": "postgresql",
+      "name": "single",
+      "schema": "schema.sql",
+      "queries": "query.sql",
+      "emit_pointers_for_null_types": true
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "packages": [
+    {
+      "path": "db",
+      "engine": "postgresql",
+      "name": "multi",
+      "schema": "schema.sql",
+      "queries": ["authors.sql", "books.sql", "reviews.sql"]
+    }
+  ]
+}

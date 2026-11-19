@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"go/format"
 	"slices"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -325,17 +326,33 @@ func generate(req *plugin.GenerateRequest, options *opts.Options, enums []Enum, 
 		files[gq.SourceName] = struct{}{}
 	}
 
+	// The set of query source files is accumulated in a map, so ranging it
+	// directly would pick a random starting point and make the order in which
+	// query files are rendered nondeterministic. Sort the names so the same
+	// input always drives the template in the same order.
+	sources := make([]string, 0, len(files))
 	for source := range files {
+		sources = append(sources, source)
+	}
+	sort.Strings(sources)
+	for _, source := range sources {
 		if err := execute(source, "queryFile"); err != nil {
 			return nil, err
 		}
 	}
 	resp := plugin.GenerateResponse{}
 
-	for filename, code := range output {
+	// Attach files in filename order so the GenerateResponse file list is
+	// stable even though rendered sources are collected in a map.
+	filenames := make([]string, 0, len(output))
+	for filename := range output {
+		filenames = append(filenames, filename)
+	}
+	sort.Strings(filenames)
+	for _, filename := range filenames {
 		resp.Files = append(resp.Files, &plugin.File{
 			Name:     filename,
-			Contents: []byte(code),
+			Contents: []byte(output[filename]),
 		})
 	}
 

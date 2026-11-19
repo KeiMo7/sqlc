@@ -51,6 +51,7 @@ func Do(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int 
 	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(pushCmd)
 	rootCmd.AddCommand(NewCmdVet())
+	rootCmd.AddCommand(idempotentCmd)
 
 	rootCmd.SetArgs(args)
 	rootCmd.SetIn(stdin)
@@ -200,12 +201,9 @@ var genCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		defer trace.StartRegion(cmd.Context(), "writefiles").End()
-		for filename, source := range output {
-			os.MkdirAll(filepath.Dir(filename), 0755)
-			if err := os.WriteFile(filename, []byte(source), 0644); err != nil {
-				fmt.Fprintf(stderr, "%s: %s\n", filename, err)
-				return err
-			}
+		if err := writeFiles(output); err != nil {
+			fmt.Fprintf(stderr, "%s\n", err)
+			return err
 		}
 		return nil
 	},
