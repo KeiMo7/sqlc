@@ -67,6 +67,63 @@
                             }
                         ]
                     },
+                    "schema_drift": {
+                        "type": "object",
+                        "properties": {
+                            "enabled": {
+                                "type": "boolean"
+                            },
+                            "development": {
+                                "oneOf": [
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                ]
+                            },
+                            "staging": {
+                                "oneOf": [
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                ]
+                            },
+                            "production": {
+                                "oneOf": [
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                ]
+                            },
+                            "gate": {
+                                "type": "boolean"
+                            },
+                            "report": {
+                                "type": "string"
+                            },
+                            "summary_threshold": {
+                                "type": "integer",
+                                "minimum": 1
+                            }
+                        }
+                    },
                     "database": {
                         "type": "object",
                         "properties": {

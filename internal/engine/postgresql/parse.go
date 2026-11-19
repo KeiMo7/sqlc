@@ -37,6 +37,20 @@ func stringSliceFromNodes(s []*nodes.Node) []string {
 	return items
 }
 
+func convertOptionalNode(node *nodes.Node) ast.Node {
+	if node == nil {
+		return nil
+	}
+	return convertNode(node)
+}
+
+func convertOptionalList(nodes []*nodes.Node) *ast.List {
+	if len(nodes) == 0 {
+		return nil
+	}
+	return convertSlice(nodes)
+}
+
 type relation struct {
 	Catalog string
 	Schema  string
@@ -345,11 +359,13 @@ func translate(node *nodes.Node) (ast.Node, error) {
 					}
 					item.Subtype = ast.AT_AddColumn
 					item.Def = &ast.ColumnDef{
-						Colname:   d.ColumnDef.Colname,
-						TypeName:  columnTypeName(rel, d.ColumnDef.TypeName),
-						IsNotNull: isNotNull(d.ColumnDef),
-						IsArray:   isArray(d.ColumnDef.TypeName),
-						ArrayDims: len(d.ColumnDef.TypeName.ArrayBounds),
+						Colname:     d.ColumnDef.Colname,
+						TypeName:    columnTypeName(rel, d.ColumnDef.TypeName),
+						IsNotNull:   isNotNull(d.ColumnDef),
+						IsArray:     isArray(d.ColumnDef.TypeName),
+						ArrayDims:   len(d.ColumnDef.TypeName.ArrayBounds),
+						RawDefault:  convertOptionalNode(d.ColumnDef.RawDefault),
+						Constraints: convertOptionalList(d.ColumnDef.Constraints),
 					}
 
 				case nodes.AlterTableType_AT_AlterColumnType:
@@ -371,11 +387,13 @@ func translate(node *nodes.Node) (ast.Node, error) {
 					}
 					item.Subtype = ast.AT_AlterColumnType
 					item.Def = &ast.ColumnDef{
-						Colname:   col,
-						TypeName:  columnTypeName(rel, d.ColumnDef.TypeName),
-						IsNotNull: isNotNull(d.ColumnDef),
-						IsArray:   isArray(d.ColumnDef.TypeName),
-						ArrayDims: len(d.ColumnDef.TypeName.ArrayBounds),
+						Colname:     col,
+						TypeName:    columnTypeName(rel, d.ColumnDef.TypeName),
+						IsNotNull:   isNotNull(d.ColumnDef),
+						IsArray:     isArray(d.ColumnDef.TypeName),
+						ArrayDims:   len(d.ColumnDef.TypeName.ArrayBounds),
+						RawDefault:  convertOptionalNode(d.ColumnDef.RawDefault),
+						Constraints: convertOptionalList(d.ColumnDef.Constraints),
 					}
 
 				case nodes.AlterTableType_AT_DropColumn:
@@ -386,6 +404,28 @@ func translate(node *nodes.Node) (ast.Node, error) {
 
 				case nodes.AlterTableType_AT_SetNotNull:
 					item.Subtype = ast.AT_SetNotNull
+
+				case nodes.AlterTableType_AT_ColumnDefault:
+					if altercmd.Def == nil {
+						item.Subtype = ast.AT_DropDefault
+					} else {
+						item.Subtype = ast.AT_SetDefault
+						item.Def = &ast.ColumnDef{Colname: altercmd.Name}
+						if d, ok := altercmd.Def.Node.(*nodes.Node_ColumnDef); ok {
+							item.Def.RawDefault = convertOptionalNode(d.ColumnDef.RawDefault)
+						} else {
+							item.Def.RawDefault = convertNode(altercmd.Def)
+						}
+					}
+
+				case nodes.AlterTableType_AT_AddConstraint:
+					item.Subtype = ast.AT_AddConstraint
+					if con, ok := convertNode(altercmd.Def).(*ast.Constraint); ok {
+						item.Constraint = con
+					}
+
+				case nodes.AlterTableType_AT_DropConstraint:
+					item.Subtype = ast.AT_DropConstraint
 
 				default:
 					continue
@@ -485,6 +525,9 @@ func translate(node *nodes.Node) (ast.Node, error) {
 		create := &ast.CreateTableStmt{
 			Name:        rel.TableName(),
 			IfNotExists: n.IfNotExists,
+			Constraints: &ast.List{},
+			Partspec:    convertPartitionSpec(n.Partspec),
+			Partbound:   convertPartitionBoundSpec(n.Partbound),
 		}
 		for _, node := range n.InhRelations {
 			switch item := node.Node.(type) {
@@ -499,6 +542,7 @@ func translate(node *nodes.Node) (ast.Node, error) {
 		for _, elt := range n.TableElts {
 			switch item := elt.Node.(type) {
 			case *nodes.Node_Constraint:
+				create.Constraints.Items = append(create.Constraints.Items, convertNode(elt))
 				if item.Constraint.Contype == nodes.ConstrType_CONSTR_PRIMARY {
 					for _, key := range item.Constraint.Keys {
 						// FIXME: Possible nil pointer dereference
@@ -527,14 +571,19 @@ func translate(node *nodes.Node) (ast.Node, error) {
 				}
 
 				create.Cols = append(create.Cols, &ast.ColumnDef{
-					Colname:    item.ColumnDef.Colname,
-					TypeName:   columnTypeName(rel, item.ColumnDef.TypeName),
-					IsNotNull:  isNotNull(item.ColumnDef) || primaryKey[item.ColumnDef.Colname],
-					IsArray:    isArray(item.ColumnDef.TypeName),
-					ArrayDims:  len(item.ColumnDef.TypeName.ArrayBounds),
-					PrimaryKey: primary,
+					Colname:     item.ColumnDef.Colname,
+					TypeName:    columnTypeName(rel, item.ColumnDef.TypeName),
+					IsNotNull:   isNotNull(item.ColumnDef) || primaryKey[item.ColumnDef.Colname],
+					IsArray:     isArray(item.ColumnDef.TypeName),
+					ArrayDims:   len(item.ColumnDef.TypeName.ArrayBounds),
+					PrimaryKey:  primary,
+					RawDefault:  convertOptionalNode(item.ColumnDef.RawDefault),
+					Constraints: convertOptionalList(item.ColumnDef.Constraints),
 				})
 			}
+		}
+		if len(create.Constraints.Items) == 0 {
+			create.Constraints = nil
 		}
 		return create, nil
 

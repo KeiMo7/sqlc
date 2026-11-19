@@ -150,6 +150,10 @@ func Generate(ctx context.Context, dir, filename string, o *Options) (map[string
 		return nil, err
 	}
 
+	if err := preflightSchemaDrift(ctx, conf, dir, stderr); err != nil {
+		return nil, err
+	}
+
 	g := &generator{
 		dir:    dir,
 		output: map[string]string{},

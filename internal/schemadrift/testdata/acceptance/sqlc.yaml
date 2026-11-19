@@ -1,0 +1,15 @@
+version: "2"
+sql:
+- engine: postgresql
+  schema: development.sql
+  queries: ../../../../examples/booktest/postgresql/query.sql
+  schema_drift:
+    enabled: true
+    staging: staging.sql
+    production: production.sql
+    gate: true
+    report: schema-drift-report.md
+  gen:
+    go:
+      package: db
+      out: db

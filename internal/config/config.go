@@ -113,17 +113,28 @@ type Overrides struct {
 }
 
 type SQL struct {
-	Name                 string    `json:"name" yaml:"name"`
-	Engine               Engine    `json:"engine,omitempty" yaml:"engine"`
-	Schema               Paths     `json:"schema" yaml:"schema"`
-	Queries              Paths     `json:"queries" yaml:"queries"`
-	Database             *Database `json:"database" yaml:"database"`
-	StrictFunctionChecks bool      `json:"strict_function_checks" yaml:"strict_function_checks"`
-	StrictOrderBy        *bool     `json:"strict_order_by" yaml:"strict_order_by"`
-	Gen                  SQLGen    `json:"gen" yaml:"gen"`
-	Codegen              []Codegen `json:"codegen" yaml:"codegen"`
-	Rules                []string  `json:"rules" yaml:"rules"`
-	Analyzer             Analyzer  `json:"analyzer" yaml:"analyzer"`
+	Name                 string       `json:"name" yaml:"name"`
+	Engine               Engine       `json:"engine,omitempty" yaml:"engine"`
+	Schema               Paths        `json:"schema" yaml:"schema"`
+	Queries              Paths        `json:"queries" yaml:"queries"`
+	SchemaDrift          *SchemaDrift `json:"schema_drift,omitempty" yaml:"schema_drift"`
+	Database             *Database    `json:"database" yaml:"database"`
+	StrictFunctionChecks bool         `json:"strict_function_checks" yaml:"strict_function_checks"`
+	StrictOrderBy        *bool        `json:"strict_order_by" yaml:"strict_order_by"`
+	Gen                  SQLGen       `json:"gen" yaml:"gen"`
+	Codegen              []Codegen    `json:"codegen" yaml:"codegen"`
+	Rules                []string     `json:"rules" yaml:"rules"`
+	Analyzer             Analyzer     `json:"analyzer" yaml:"analyzer"`
+}
+
+type SchemaDrift struct {
+	Enabled          bool   `json:"enabled" yaml:"enabled"`
+	Development      Paths  `json:"development" yaml:"development"`
+	Staging          Paths  `json:"staging" yaml:"staging"`
+	Production       Paths  `json:"production" yaml:"production"`
+	Gate             bool   `json:"gate" yaml:"gate"`
+	Report           string `json:"report" yaml:"report"`
+	SummaryThreshold int    `json:"summary_threshold" yaml:"summary_threshold"`
 }
 
 type Analyzer struct {

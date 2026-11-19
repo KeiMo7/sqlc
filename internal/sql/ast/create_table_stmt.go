@@ -5,12 +5,15 @@ import "github.com/sqlc-dev/sqlc/internal/sql/format"
 type CreateTableStmt struct {
 	Tag NodeTag[CreateTableStmt] `json:"tag"`
 
-	IfNotExists bool         `json:"if_not_exists"`
-	Name        *TableName   `json:"name,omitempty"`
-	Cols        []*ColumnDef `json:"cols,omitempty"`
-	ReferTable  *TableName   `json:"refer_table,omitempty"`
-	Comment     string       `json:"comment"`
-	Inherits    []*TableName `json:"inherits,omitempty"`
+	IfNotExists bool                `json:"if_not_exists"`
+	Name        *TableName          `json:"name,omitempty"`
+	Cols        []*ColumnDef        `json:"cols,omitempty"`
+	Constraints *List               `json:"constraints,omitempty"`
+	ReferTable  *TableName          `json:"refer_table,omitempty"`
+	Comment     string              `json:"comment"`
+	Inherits    []*TableName        `json:"inherits,omitempty"`
+	Partspec    *PartitionSpec      `json:"partspec,omitempty"`
+	Partbound   *PartitionBoundSpec `json:"partbound,omitempty"`
 	// Using names the module of a virtual table (SQLite's CREATE VIRTUAL
 	// TABLE ... USING module(...)), and ModuleArgs carries the module's
 	// argument list as written — its grammar belongs to the module, so the

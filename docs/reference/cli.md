@@ -16,6 +16,7 @@ Available Commands:
   init        Create an empty sqlc.yaml settings file
   parse       Parse SQL and output the AST as JSON
   push        Push the schema, queries, and configuration for this project
+  schema-drift Compare development, staging, and production schemas
   verify      Verify schema, queries, and configuration for this project
   version     Print the sqlc version number
   vet         Vet examines queries

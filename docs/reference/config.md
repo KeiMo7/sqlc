@@ -42,6 +42,8 @@ Each mapping in the `sql` collection has the following keys:
   - Directory of SQL migrations or path to single SQL file; or a list of paths.
 - `queries`:
   - Directory of SQL queries or path to single SQL file; or a list of paths.
+- `schema_drift`:
+  - Optional comparison of the development, staging and production schemas before generation. See [schema_drift](#schema_drift) for the supported keys.
 - `codegen`:
   - A collection of mappings to configure code generators. See [codegen](#codegen) for the supported keys.
 - `gen`:
@@ -56,6 +58,54 @@ Each mapping in the `sql` collection has the following keys:
   - If true, return an error if a called SQL function does not exist. Defaults to `false`.
 - `strict_order_by`
   - If true, return an error if a order by column is ambiguous. Defaults to `true`.
+
+### schema_drift
+
+Schema drift detection is disabled by default. When enabled it parses all three
+schemas with the configured engine's existing SQL parser before any code is
+generated. A parse failure names the failing file and aborts the comparison;
+no partial schema is compared.
+
+```yaml
+version: "2"
+sql:
+- engine: postgresql
+  schema: schema/development
+  queries: query.sql
+  schema_drift:
+    enabled: true
+    staging: schema/staging
+    production: schema/production
+    gate: true
+    report: schema-drift-report.md
+    summary_threshold: 200
+```
+
+- `enabled`:
+  - Enables drift detection. Defaults to `false`.
+- `development`:
+  - Development schema paths. When omitted, the package's `schema` paths are used.
+- `staging`:
+  - Staging schema paths. Required when `enabled` is true.
+- `production`:
+  - Production schema paths. Required when `enabled` is true.
+- `gate`:
+  - When true, `sqlc generate` fails with a non-zero exit code if development
+    and production differ in a way that can make generated code incompatible.
+- `report`:
+  - Full report path. Defaults to `schema-drift-report.md`. The report is always
+    written when drift detection is enabled, including when the gate fails.
+- `summary_threshold`:
+  - Diff count above which the report only prints per-table summary counts.
+    Defaults to `200`.
+
+The full report includes all differences. Gate output includes only differences
+that make code generated from the development schema incompatible with the
+production schema. Both use the same comparison result. Partition changes and
+view dependency impact are rendered in separate report sections.
+
+Run `sqlc schema-drift` (alias `sqlc drift`) to compare the schemas without
+generating code. Add `--gate` to print only incompatible differences.
 
 ### codegen
 

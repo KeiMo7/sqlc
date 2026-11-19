@@ -8,6 +8,10 @@ const (
 	AT_DropColumn
 	AT_DropNotNull
 	AT_SetNotNull
+	AT_SetDefault
+	AT_DropDefault
+	AT_AddConstraint
+	AT_DropConstraint
 )
 
 type AlterTableType int
@@ -24,6 +28,14 @@ func (t AlterTableType) String() string {
 		return "DropNotNull"
 	case AT_SetNotNull:
 		return "SetNotNull"
+	case AT_SetDefault:
+		return "SetDefault"
+	case AT_DropDefault:
+		return "DropDefault"
+	case AT_AddConstraint:
+		return "AddConstraint"
+	case AT_DropConstraint:
+		return "DropConstraint"
 	default:
 		return "Unknown"
 	}
@@ -32,12 +44,13 @@ func (t AlterTableType) String() string {
 type AlterTableCmd struct {
 	Tag NodeTag[AlterTableCmd] `json:"tag"`
 
-	Subtype   AlterTableType `json:"subtype"`
-	Name      *string        `json:"name,omitempty"`
-	Def       *ColumnDef     `json:"def,omitempty"`
-	Newowner  *RoleSpec      `json:"newowner,omitempty"`
-	Behavior  DropBehavior   `json:"behavior"`
-	MissingOk bool           `json:"missing_ok"`
+	Subtype    AlterTableType `json:"subtype"`
+	Name       *string        `json:"name,omitempty"`
+	Def        *ColumnDef     `json:"def,omitempty"`
+	Constraint *Constraint    `json:"constraint,omitempty"`
+	Newowner   *RoleSpec      `json:"newowner,omitempty"`
+	Behavior   DropBehavior   `json:"behavior"`
+	MissingOk  bool           `json:"missing_ok"`
 }
 
 func (n *AlterTableCmd) Pos() int {
