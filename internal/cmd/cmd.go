@@ -29,6 +29,10 @@ var debugProcessPlugins = sqlcdebug.New("processplugins")
 func init() {
 	createDBCmd.Flags().StringP("queryset", "", "", "name of the queryset to use")
 	pushCmd.Flags().BoolP("dry-run", "", false, "dump push request (default: false)")
+	genCmd.Flags().Bool("nullability-explain", false, "write a sidecar explaining output-column nullability")
+	genCmd.Flags().String("nullability-out", "", "path for the nullability explanation sidecar")
+	genCmd.Flags().StringArray("nullability-table", nil, "only explain fields from this table (repeatable)")
+	genCmd.Flags().StringArray("nullability-field", nil, "only explain this field (repeatable)")
 	initCmd.Flags().BoolP("v1", "", false, "generate v1 config yaml file")
 	initCmd.Flags().BoolP("v2", "", true, "generate v2 config yaml file")
 	initCmd.MarkFlagsMutuallyExclusive("v1", "v2")
@@ -192,9 +196,17 @@ var genCmd = &cobra.Command{
 		defer trace.StartRegion(cmd.Context(), "generate").End()
 		stderr := cmd.ErrOrStderr()
 		dir, name := getConfigPath(stderr, cmd.Flag("file"))
+		explain, _ := cmd.Flags().GetBool("nullability-explain")
+		nullabilityOut, _ := cmd.Flags().GetString("nullability-out")
+		nullabilityTables, _ := cmd.Flags().GetStringArray("nullability-table")
+		nullabilityFields, _ := cmd.Flags().GetStringArray("nullability-field")
 		output, err := Generate(cmd.Context(), dir, name, &Options{
-			Env:    ParseEnv(cmd),
-			Stderr: stderr,
+			Env:                ParseEnv(cmd),
+			Stderr:             stderr,
+			ExplainNullability: explain,
+			NullabilityOutput:  nullabilityOut,
+			NullabilityTables:  nullabilityTables,
+			NullabilityFields:  nullabilityFields,
 		})
 		if err != nil {
 			os.Exit(1)

@@ -1,0 +1,445 @@
+{
+  "version": 1,
+  "filters": {},
+  "queries": [
+    {
+      "query_id": "query.sql:GetBio",
+      "query_name": "GetBio",
+      "filename": "query.sql",
+      "engine": "postgresql",
+      "package": "querytest",
+      "sql": "SELECT profiles.bio\nFROM profiles\nJOIN users ON users.id = profiles.user_id\nWHERE users.id = $1",
+      "columns": [
+        {
+          "position": 1,
+          "field": "bio",
+          "table": "profiles",
+          "source_column": "bio",
+          "data_type": "text",
+          "nullable": false,
+          "cause": "schema",
+          "rule": "schema.column_not_null",
+          "reason": "column profiles.bio is declared NOT NULL",
+          "steps": [
+            {
+              "nullable": false,
+              "cause": "schema",
+              "rule": "schema.column_not_null",
+              "detail": "column profiles.bio is declared NOT NULL"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_id": "query.sql:GetUser",
+      "query_name": "GetUser",
+      "filename": "query.sql",
+      "engine": "postgresql",
+      "package": "querytest",
+      "sql": "SELECT\n  users.email,\n  users.name,\n  users.score,\n  (SELECT profiles.bio FROM profiles WHERE profiles.user_id = users.id) AS profile_bio\nFROM users\nWHERE users.id = $1",
+      "columns": [
+        {
+          "position": 1,
+          "field": "email",
+          "table": "users",
+          "source_column": "email",
+          "data_type": "text",
+          "nullable": true,
+          "cause": "schema",
+          "rule": "schema.column_nullable",
+          "reason": "column users.email is declared nullable",
+          "steps": [
+            {
+              "nullable": true,
+              "cause": "schema",
+              "rule": "schema.column_nullable",
+              "detail": "column users.email is declared nullable"
+            }
+          ]
+        },
+        {
+          "position": 2,
+          "field": "name",
+          "table": "users",
+          "source_column": "name",
+          "data_type": "text",
+          "nullable": false,
+          "cause": "schema",
+          "rule": "schema.column_not_null",
+          "reason": "column users.name is declared NOT NULL",
+          "steps": [
+            {
+              "nullable": false,
+              "cause": "schema",
+              "rule": "schema.column_not_null",
+              "detail": "column users.name is declared NOT NULL"
+            }
+          ]
+        },
+        {
+          "position": 3,
+          "field": "score",
+          "table": "users",
+          "source_column": "score",
+          "data_type": "pg_catalog.int4",
+          "nullable": false,
+          "cause": "schema",
+          "rule": "schema.column_not_null_with_default",
+          "reason": "column users.score is declared NOT NULL with a default; the default does not make the column nullable",
+          "steps": [
+            {
+              "nullable": false,
+              "cause": "schema",
+              "rule": "schema.column_not_null_with_default",
+              "detail": "column users.score is declared NOT NULL with a default; the default does not make the column nullable"
+            }
+          ]
+        },
+        {
+          "position": 4,
+          "field": "profile_bio",
+          "table": "profiles",
+          "source_column": "bio",
+          "data_type": "text",
+          "nullable": false,
+          "cause": "query",
+          "rule": "query.subquery.scalar",
+          "reason": "a scalar subquery takes its inner column's conclusion under the existing inference",
+          "steps": [
+            {
+              "nullable": false,
+              "cause": "schema",
+              "rule": "schema.column_not_null",
+              "detail": "column profiles.bio is declared NOT NULL"
+            },
+            {
+              "nullable": false,
+              "cause": "query",
+              "rule": "query.subquery.scalar",
+              "detail": "a scalar subquery takes its inner column's conclusion under the existing inference"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_id": "query.sql:ListUserProfiles",
+      "query_name": "ListUserProfiles",
+      "filename": "query.sql",
+      "engine": "postgresql",
+      "package": "querytest",
+      "sql": "SELECT users.email, profiles.bio\nFROM users\nLEFT JOIN profiles ON profiles.user_id = users.id",
+      "columns": [
+        {
+          "position": 1,
+          "field": "email",
+          "table": "users",
+          "source_column": "email",
+          "data_type": "text",
+          "nullable": true,
+          "cause": "schema",
+          "rule": "schema.column_nullable",
+          "reason": "column users.email is declared nullable",
+          "steps": [
+            {
+              "nullable": true,
+              "cause": "schema",
+              "rule": "schema.column_nullable",
+              "detail": "column users.email is declared nullable"
+            }
+          ]
+        },
+        {
+          "position": 2,
+          "field": "bio",
+          "table": "profiles",
+          "source_column": "bio",
+          "data_type": "text",
+          "nullable": true,
+          "cause": "query",
+          "rule": "query.outer_join",
+          "reason": "column profiles is on the nullable side of an outer join",
+          "steps": [
+            {
+              "nullable": false,
+              "cause": "schema",
+              "rule": "schema.column_not_null",
+              "detail": "column profiles.bio is declared NOT NULL"
+            },
+            {
+              "nullable": true,
+              "cause": "query",
+              "rule": "query.outer_join",
+              "detail": "column profiles is on the nullable side of an outer join"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_id": "query.sql:UserStats",
+      "query_name": "UserStats",
+      "filename": "query.sql",
+      "engine": "postgresql",
+      "package": "querytest",
+      "sql": "SELECT\n  count(*) AS row_count,\n  sum(users.score) AS total_score,\n  coalesce(sum(users.score), 0) AS safe_total\nFROM users",
+      "columns": [
+        {
+          "position": 1,
+          "field": "row_count",
+          "data_type": "bigint",
+          "nullable": false,
+          "cause": "query",
+          "rule": "query.aggregate.count",
+          "reason": "COUNT always returns a row value and is not NULL",
+          "steps": [
+            {
+              "nullable": false,
+              "cause": "query",
+              "rule": "query.aggregate.count",
+              "detail": "COUNT always returns a row value and is not NULL"
+            }
+          ]
+        },
+        {
+          "position": 2,
+          "field": "total_score",
+          "data_type": "bigint",
+          "nullable": false,
+          "cause": "query",
+          "rule": "query.aggregate.not_null",
+          "reason": "aggregate sum is marked non-NULL by the existing function catalog",
+          "steps": [
+            {
+              "nullable": false,
+              "cause": "query",
+              "rule": "query.aggregate.not_null",
+              "detail": "aggregate sum is marked non-NULL by the existing function catalog"
+            }
+          ]
+        },
+        {
+          "position": 3,
+          "field": "safe_total",
+          "data_type": "any",
+          "nullable": true,
+          "cause": "fallback",
+          "rule": "fallback.unexplained_decision",
+          "reason": "the recorded rule did not explain the decision; the conservative policy keeps the existing NULL result",
+          "steps": [
+            {
+              "nullable": true,
+              "cause": "fallback",
+              "rule": "fallback.unexplained_decision",
+              "detail": "the recorded rule did not explain the decision; the conservative policy keeps the existing NULL result"
+            }
+          ],
+          "conservative_policy": "nullable"
+        }
+      ]
+    },
+    {
+      "query_id": "query.sql:UserView",
+      "query_name": "UserView",
+      "filename": "query.sql",
+      "engine": "postgresql",
+      "package": "querytest",
+      "sql": "SELECT name FROM user_names",
+      "columns": [
+        {
+          "position": 1,
+          "field": "name",
+          "table": "user_names",
+          "source_column": "name",
+          "data_type": "text",
+          "nullable": false,
+          "cause": "schema",
+          "rule": "schema.column_not_null",
+          "reason": "column users.name is declared NOT NULL",
+          "steps": [
+            {
+              "nullable": false,
+              "cause": "schema",
+              "rule": "schema.column_not_null",
+              "detail": "column users.name is declared NOT NULL"
+            },
+            {
+              "nullable": false,
+              "cause": "query",
+              "rule": "view.projected_column",
+              "detail": "column name is read through view user_names; its conclusion comes from the view definition"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "fields": [
+    {
+      "table": "profiles",
+      "column": "bio",
+      "conclusions": [
+        {
+          "query_id": "query.sql:GetBio",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": false,
+          "cause": "schema",
+          "rule": "schema.column_not_null"
+        },
+        {
+          "query_id": "query.sql:GetUser",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": false,
+          "cause": "query",
+          "rule": "query.subquery.scalar"
+        },
+        {
+          "query_id": "query.sql:ListUserProfiles",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": true,
+          "cause": "query",
+          "rule": "query.outer_join"
+        }
+      ]
+    },
+    {
+      "column": "row_count",
+      "conclusions": [
+        {
+          "query_id": "query.sql:UserStats",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": false,
+          "cause": "query",
+          "rule": "query.aggregate.count"
+        }
+      ]
+    },
+    {
+      "column": "safe_total",
+      "conclusions": [
+        {
+          "query_id": "query.sql:UserStats",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": true,
+          "cause": "fallback",
+          "rule": "fallback.unexplained_decision"
+        }
+      ]
+    },
+    {
+      "column": "total_score",
+      "conclusions": [
+        {
+          "query_id": "query.sql:UserStats",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": false,
+          "cause": "query",
+          "rule": "query.aggregate.not_null"
+        }
+      ]
+    },
+    {
+      "table": "user_names",
+      "column": "name",
+      "conclusions": [
+        {
+          "query_id": "query.sql:UserView",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": false,
+          "cause": "schema",
+          "rule": "schema.column_not_null"
+        }
+      ]
+    },
+    {
+      "table": "users",
+      "column": "email",
+      "conclusions": [
+        {
+          "query_id": "query.sql:GetUser",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": true,
+          "cause": "schema",
+          "rule": "schema.column_nullable"
+        },
+        {
+          "query_id": "query.sql:ListUserProfiles",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": true,
+          "cause": "schema",
+          "rule": "schema.column_nullable"
+        }
+      ]
+    },
+    {
+      "table": "users",
+      "column": "name",
+      "conclusions": [
+        {
+          "query_id": "query.sql:GetUser",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": false,
+          "cause": "schema",
+          "rule": "schema.column_not_null"
+        }
+      ]
+    },
+    {
+      "table": "users",
+      "column": "score",
+      "conclusions": [
+        {
+          "query_id": "query.sql:GetUser",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": false,
+          "cause": "schema",
+          "rule": "schema.column_not_null_with_default"
+        }
+      ]
+    }
+  ],
+  "cross_query_differences": [
+    {
+      "key": "profiles.bio",
+      "reason": "the same source column has different conclusions because the queries apply different rules: query.sql:GetBio via schema.column_not_null (schema); query.sql:GetUser via query.subquery.scalar (query); query.sql:ListUserProfiles via query.outer_join (query)",
+      "conclusions": [
+        {
+          "query_id": "query.sql:GetBio",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": false,
+          "cause": "schema",
+          "rule": "schema.column_not_null"
+        },
+        {
+          "query_id": "query.sql:GetUser",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": false,
+          "cause": "query",
+          "rule": "query.subquery.scalar"
+        },
+        {
+          "query_id": "query.sql:ListUserProfiles",
+          "engine": "postgresql",
+          "package": "querytest",
+          "nullable": true,
+          "cause": "query",
+          "rule": "query.outer_join"
+        }
+      ]
+    }
+  ]
+}

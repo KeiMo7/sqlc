@@ -109,11 +109,12 @@ func derivedRel(alias string, cols []core.Column) scopeRel {
 	rel := scopeRel{alias: alias, cols: make([]core.ClassColumn, 0, len(cols))}
 	for _, col := range cols {
 		rel.cols = append(rel.cols, core.ClassColumn{
-			AttOID:  col.SourceAttributeOID,
-			Name:    col.Name,
-			TypeOID: col.TypeOID,
-			Type:    col.Type.WithNullable(false),
-			NotNull: col.NotNull,
+			AttOID:      col.SourceAttributeOID,
+			Name:        col.Name,
+			TypeOID:     col.TypeOID,
+			Type:        col.Type.WithNullable(false),
+			NotNull:     col.NotNull,
+			Nullability: col.Nullability,
 		})
 	}
 	return rel

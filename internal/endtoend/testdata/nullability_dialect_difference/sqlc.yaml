@@ -1,0 +1,21 @@
+version: "2"
+nullability:
+  explain: true
+  output: "nullability.json"
+sql:
+  - name: "pg"
+    engine: "postgresql"
+    schema: "schema.sql"
+    queries: "query.sql"
+    gen:
+      go:
+        package: "pgquery"
+        out: "go-pg"
+  - name: "sqlite"
+    engine: "sqlite"
+    schema: "schema.sql"
+    queries: "query.sql"
+    gen:
+      go:
+        package: "sqlitequery"
+        out: "go-sqlite"

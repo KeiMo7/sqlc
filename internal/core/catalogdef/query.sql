@@ -204,7 +204,7 @@ WHERE c.name = ?
 ORDER BY a.num;
 
 -- name: ClassAttributes :many
-SELECT oid, name, type_oid, not_null, hidden
+SELECT oid, name, type_oid, not_null, has_default, hidden
 FROM sql_attribute
 WHERE class_oid = ?
 ORDER BY num;
@@ -218,7 +218,8 @@ ORDER BY a.num;
 
 -- name: LookupAttribute :one
 SELECT ns.name AS schema_name, cls.name AS table_name, a.name AS column_name, a.num,
-       a.decl_type, a.auto_increment, a.is_primary_key, a.is_unique, a.not_null
+       a.decl_type, a.auto_increment, a.is_primary_key, a.is_unique, a.not_null,
+       a.has_default
 FROM sql_attribute a
 JOIN sql_class cls ON cls.oid = a.class_oid
 JOIN sql_namespace ns ON ns.oid = cls.namespace_oid

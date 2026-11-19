@@ -24,6 +24,7 @@ import (
 	"github.com/sqlc-dev/sqlc/internal/ext/process"
 	"github.com/sqlc-dev/sqlc/internal/ext/wasm"
 	"github.com/sqlc-dev/sqlc/internal/multierr"
+	"github.com/sqlc-dev/sqlc/internal/nullability"
 	"github.com/sqlc-dev/sqlc/internal/opts"
 	"github.com/sqlc-dev/sqlc/internal/plugin"
 	"github.com/sqlc-dev/sqlc/internal/sqlcdebug"
@@ -140,6 +141,21 @@ func Generate(ctx context.Context, dir, filename string, o *Options) (map[string
 	}
 
 	base := filepath.Base(configPath)
+	if o.ExplainNullability {
+		conf.Nullability.Explain = true
+	}
+	if o.NullabilityOutput != "" {
+		conf.Nullability.Output = o.NullabilityOutput
+	}
+	if len(o.NullabilityTables) > 0 {
+		conf.Nullability.Tables = append([]string(nil), o.NullabilityTables...)
+	}
+	if len(o.NullabilityFields) > 0 {
+		conf.Nullability.Fields = append([]string(nil), o.NullabilityFields...)
+	}
+	if conf.Nullability.Output == "" {
+		conf.Nullability.Output = config.DefaultNullabilityOutput
+	}
 	if err := config.Validate(conf); err != nil {
 		fmt.Fprintf(stderr, "error validating %s: %s\n", base, err)
 		return nil, err
@@ -151,21 +167,29 @@ func Generate(ctx context.Context, dir, filename string, o *Options) (map[string
 	}
 
 	g := &generator{
-		dir:    dir,
-		output: map[string]string{},
+		dir:          dir,
+		output:       map[string]string{},
+		explanations: map[string]nullability.QuerySnapshot{},
 	}
 
 	if err := processQuerySets(ctx, g, conf, dir, o); err != nil {
 		return nil, err
 	}
 
+	if conf.Nullability.Explain {
+		if err := g.writeNullabilityArtifact(dir, conf.Nullability); err != nil {
+			fmt.Fprintf(stderr, "warning: nullability explanation was not written: %s\n", err)
+		}
+	}
+
 	return g.output, nil
 }
 
 type generator struct {
-	m      sync.Mutex
-	dir    string
-	output map[string]string
+	m            sync.Mutex
+	dir          string
+	output       map[string]string
+	explanations map[string]nullability.QuerySnapshot
 }
 
 func (g *generator) Pairs(ctx context.Context, conf *config.Config) []OutputPair {
@@ -249,6 +273,107 @@ func (g *generator) ProcessResult(ctx context.Context, combo config.CombinedSett
 		g.output[filename] = source
 	}
 	g.m.Unlock()
+
+	if combo.Global.Nullability.Explain {
+		g.addNullabilitySnapshots(combo, result)
+	}
+	return nil
+}
+
+func (g *generator) addNullabilitySnapshots(combo config.CombinedSettings, result *compiler.Result) {
+	engine := string(combo.Package.Engine)
+	if engine == "" {
+		engine = string(combo.Global.SQL[0].Engine)
+	}
+	pkg := combo.Package.Name
+	if pkg == "" {
+		switch {
+		case combo.Package.Gen.Go != nil:
+			pkg = combo.Package.Gen.Go.Package
+		case combo.Package.Gen.JSON != nil:
+			pkg = "json"
+		default:
+			pkg = engine
+		}
+	}
+
+	g.m.Lock()
+	defer g.m.Unlock()
+	for _, query := range result.Queries {
+		queryID := query.Metadata.Name
+		if query.Metadata.Filename != "" {
+			queryID = query.Metadata.Filename + ":" + query.Metadata.Name
+		}
+		snapshot := nullability.QuerySnapshot{
+			QueryID:   queryID,
+			QueryName: query.Metadata.Name,
+			Filename:  query.Metadata.Filename,
+			Engine:    engine,
+			Package:   pkg,
+			SQL:       query.SQL,
+		}
+		for i, column := range query.Columns {
+			columnSnapshot := nullability.ColumnSnapshot{
+				Position: i + 1,
+				Field:    column.Name,
+				DataType: column.DataType,
+				Nullable: !column.NotNull,
+				Origin:   column.Nullability,
+			}
+			if column.Table != nil {
+				columnSnapshot.Schema = column.Table.Schema
+				columnSnapshot.Table = column.Table.Name
+			}
+			columnSnapshot.SourceColumn = column.OriginalName
+			if columnSnapshot.SourceColumn == "" && columnSnapshot.Table != "" {
+				columnSnapshot.SourceColumn = column.Name
+			}
+			snapshot.Columns = append(snapshot.Columns, columnSnapshot)
+		}
+		key := fmt.Sprintf("%s|%s|%s|%s|%s",
+			engine,
+			pkg,
+			queryID,
+			strings.Join(combo.Package.Schema, "\x00"),
+			strings.Join(combo.Package.Queries, "\x00"),
+		)
+		g.explanations[key] = snapshot
+	}
+}
+
+func (g *generator) writeNullabilityArtifact(dir string, conf config.Nullability) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("build explanation: %v", recovered)
+		}
+	}()
+
+	g.m.Lock()
+	snapshots := make([]nullability.QuerySnapshot, 0, len(g.explanations))
+	for _, snapshot := range g.explanations {
+		snapshots = append(snapshots, snapshot)
+	}
+	g.m.Unlock()
+
+	artifact := nullability.Build(snapshots, nullability.Filters{
+		Tables: conf.Tables,
+		Fields: conf.Fields,
+	})
+	blob, err := json.MarshalIndent(artifact, "", "  ")
+	if err != nil {
+		return err
+	}
+	path := conf.Output
+	if path == "" {
+		path = config.DefaultNullabilityOutput
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(dir, path)
+	}
+
+	g.m.Lock()
+	g.output[path] = string(blob) + "\n"
+	g.m.Unlock()
 	return nil
 }
 
@@ -257,6 +382,9 @@ func parse(ctx context.Context, name, dir string, sql config.SQL, combo config.C
 	var copts []compiler.Option
 	if parserOpts.Experiment.CoreAnalyzer {
 		copts = append(copts, compiler.WithCoreAnalysis())
+	}
+	if combo.Global.Nullability.Explain {
+		copts = append(copts, compiler.WithNullabilityExplanation())
 	}
 	c, err := compiler.NewCompiler(sql, combo, parserOpts, copts...)
 	defer func() {

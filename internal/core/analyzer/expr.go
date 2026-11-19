@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/sqlc-dev/sqlc/internal/core"
+	"github.com/sqlc-dev/sqlc/internal/nullability"
 	"github.com/sqlc-dev/sqlc/internal/sql/ast"
 )
 
@@ -24,6 +25,7 @@ type exprType struct {
 	sourceClassOID     int64
 	sourceAttributeOID int64
 	sourceTableAlias   string
+	nullability        *nullability.Origin
 }
 
 func (a *analyzer) typeExpr(n ast.Node) (exprType, error) {
@@ -120,23 +122,35 @@ func (a *analyzer) typeConst(c *ast.A_Const) (exprType, error) {
 		if err != nil {
 			return exprType{}, err
 		}
-		return exprType{typeOID: oid}, nil
+		return exprType{
+			typeOID:     oid,
+			nullability: nullability.QueryRule(false, nullability.RuleConstant, "an integer literal is never NULL"),
+		}, nil
 	case *ast.Float:
 		oid, err := a.cat.ConstTypeOID(core.ConstFloat)
 		if err != nil {
 			return exprType{}, err
 		}
-		return exprType{typeOID: oid}, nil
+		return exprType{
+			typeOID:     oid,
+			nullability: nullability.QueryRule(false, nullability.RuleConstant, "a float literal is never NULL"),
+		}, nil
 	case *ast.String:
 		oid, err := a.cat.ConstTypeOID(core.ConstString)
 		if err != nil {
 			return exprType{}, err
 		}
-		return exprType{typeOID: oid}, nil
+		return exprType{
+			typeOID:     oid,
+			nullability: nullability.QueryRule(false, nullability.RuleConstant, "a string literal is never NULL"),
+		}, nil
 	case *ast.Boolean:
 		return a.boolType(false)
 	case *ast.Null, nil:
-		return exprType{nullable: true}, nil
+		return exprType{
+			nullable:    true,
+			nullability: nullability.QueryRule(true, nullability.RuleConstant, "a NULL literal is NULL"),
+		}, nil
 	}
 	return exprType{}, fmt.Errorf("typeConst: unsupported %T", c.Val)
 }
@@ -146,7 +160,11 @@ func (a *analyzer) boolType(nullable bool) (exprType, error) {
 	if err != nil {
 		return exprType{}, err
 	}
-	return exprType{typeOID: oid, nullable: nullable}, nil
+	return exprType{
+		typeOID:     oid,
+		nullable:    nullable,
+		nullability: nullability.QueryRule(nullable, nullability.RuleBoolean, "the existing boolean-expression rule decides this result"),
+	}, nil
 }
 
 func (a *analyzer) typeColumnRef(c *ast.ColumnRef) (exprType, error) {
@@ -337,6 +355,11 @@ func (a *analyzer) typeAExpr(e *ast.A_Expr) (exprType, error) {
 	return exprType{
 		typeOID:  overload.ResultTypeOID,
 		nullable: (leftT.nullable || rightT.nullable) && !isNullTest(opName),
+		nullability: nullability.QueryRule(
+			(leftT.nullable || rightT.nullable) && !isNullTest(opName),
+			operatorRule(opName),
+			fmt.Sprintf("operator %s uses the existing null-propagation rule", opName),
+		),
 	}, nil
 }
 
@@ -360,6 +383,17 @@ func isNullTest(opName string) bool {
 		return true
 	}
 	return false
+}
+
+func operatorRule(opName string) string {
+	if isNullTest(opName) {
+		return nullability.RulePredicate
+	}
+	switch opName {
+	case "=", "<>", "!=", "<", "<=", ">", ">=", "LIKE", "ILIKE", "IS", "IS NOT":
+		return nullability.RulePredicate
+	}
+	return nullability.RuleOperator
 }
 
 // typeQuantifiedExpr types "x = ANY($1)" and "x > ALL(...)": the right side
@@ -478,6 +512,7 @@ func (a *analyzer) typeCase(e *ast.CaseExpr) (exprType, error) {
 	if err != nil {
 		return exprType{}, err
 	}
+	t.nullability = nullability.QueryRule(t.nullable, nullability.RuleCase, "CASE follows the existing branch and default-result rules")
 	return t, nil
 }
 
@@ -500,6 +535,7 @@ func (a *analyzer) typeCoalesce(e *ast.CoalesceExpr) (exprType, error) {
 		nullable = nullable && t.nullable
 	}
 	out.nullable = nullable
+	out.nullability = nullability.QueryRule(nullable, nullability.RuleCoalesce, "COALESCE is nullable only when every argument is nullable")
 	return out, nil
 }
 
@@ -521,6 +557,7 @@ func (a *analyzer) typeFirstOf(nodes []ast.Node, nullable bool) (exprType, error
 		nullable = nullable || t.nullable
 	}
 	out.nullable = nullable
+	out.nullability = nullability.QueryRule(nullable, nullability.RuleCase, "the existing first-typed-alternative rule decides this result")
 	return out, nil
 }
 
@@ -565,10 +602,14 @@ func (a *analyzer) typeIndirection(e *ast.A_Indirection) (exprType, error) {
 		}
 		element := a.exprOf(t).Element()
 		if element == nil {
-			return exprType{nullable: true}, nil
+			return exprType{
+				nullable:    true,
+				nullability: nullability.Fallback(true),
+			}, nil
 		}
 		t = a.lookupType(element)
 		t.nullable = true
+		t.nullability = nullability.QueryRule(true, nullability.RuleOperator, "an array subscript may yield NULL")
 	}
 	return t, nil
 }
@@ -668,7 +709,10 @@ func (a *analyzer) typeSubLink(e *ast.SubLink) (exprType, error) {
 	sel, ok := e.Subselect.(*ast.SelectStmt)
 	if !ok {
 		if e.SubLinkType == ast.EXPR_SUBLINK || e.SubLinkType == ast.ARRAY_SUBLINK {
-			return exprType{nullable: true}, nil
+			return exprType{
+				nullable:    true,
+				nullability: nullability.QueryRule(true, nullability.RuleSubqueryScalar, "a subquery result may be NULL"),
+			}, nil
 		}
 		return a.boolType(false)
 	}
@@ -679,11 +723,15 @@ func (a *analyzer) typeSubLink(e *ast.SubLink) (exprType, error) {
 	switch e.SubLinkType {
 	case ast.EXPR_SUBLINK:
 		if len(cols) == 0 {
-			return exprType{nullable: true}, nil
+			return exprType{
+				nullable:    true,
+				nullability: nullability.QueryRule(true, nullability.RuleSubqueryScalar, "a scalar subquery may match no row and yield NULL"),
+			}, nil
 		}
 		// A subquery that matches no row yields NULL.
 		t := columnExprType(cols[0])
 		t.nullable = true
+		t.nullability = nullability.QueryRule(true, nullability.RuleSubqueryScalar, "a scalar subquery may match no row and yield NULL")
 		return t, nil
 	case ast.ARRAY_SUBLINK:
 		// ARRAY(SELECT ...) collects the column into an array, which is
@@ -691,7 +739,9 @@ func (a *analyzer) typeSubLink(e *ast.SubLink) (exprType, error) {
 		if len(cols) == 0 {
 			return exprType{}, nil
 		}
-		return a.arrayOf(columnExprType(cols[0])), nil
+		t := a.arrayOf(columnExprType(cols[0]))
+		t.nullability = nullability.QueryRule(false, nullability.RuleSubqueryArray, "ARRAY(SELECT ...) is empty rather than NULL when no row matches")
+		return t, nil
 	default:
 		return a.boolType(false)
 	}
@@ -714,7 +764,12 @@ func (a *analyzer) typeComparison(e *ast.A_Expr) (exprType, error) {
 	if err := a.typeOperands(e.Lexpr, rightT); err != nil {
 		return exprType{}, err
 	}
-	return a.boolType(false)
+	out, err := a.boolType(false)
+	if err != nil {
+		return exprType{}, err
+	}
+	out.nullability = nullability.QueryRule(false, nullability.RulePredicate, "IS DISTINCT FROM and its negation are never NULL")
+	return out, nil
 }
 
 // typeNullIf types NULLIF(x, y), which is x, made nullable.
@@ -727,6 +782,7 @@ func (a *analyzer) typeNullIf(e *ast.A_Expr) (exprType, error) {
 		return exprType{}, err
 	}
 	leftT.nullable = true
+	leftT.nullability = nullability.QueryRule(true, nullability.RuleOperator, "NULLIF makes its result nullable")
 	return leftT, nil
 }
 
@@ -861,13 +917,21 @@ func (a *analyzer) typeFuncCall(f *ast.FuncCall) (exprType, error) {
 
 	if f.AggStar && (name == "count" || name == "count.*") {
 		if overloads, err := a.cat.FindProcs("count", nil); err == nil && len(overloads) > 0 {
-			return exprType{typeOID: overloads[0].ReturnTypeOID, nullable: overloads[0].ReturnNullable}, nil
+			nullable := overloads[0].ReturnNullable
+			return exprType{
+				typeOID:     overloads[0].ReturnTypeOID,
+				nullable:    nullable,
+				nullability: nullability.QueryRule(nullable, nullability.RuleAggregateCount, "COUNT always returns a row value and is not NULL"),
+			}, nil
 		}
 		oid, err := a.cat.TypeOID("bigint")
 		if err != nil {
 			return exprType{}, err
 		}
-		return exprType{typeOID: oid, nullable: false}, nil
+		return exprType{
+			typeOID:     oid,
+			nullability: nullability.QueryRule(false, nullability.RuleAggregateCount, "COUNT always returns a row value and is not NULL"),
+		}, nil
 	}
 
 	args := listItems(f.Args)
@@ -892,7 +956,10 @@ func (a *analyzer) typeFuncCall(f *ast.FuncCall) (exprType, error) {
 		// A dialect's function list is never complete — extensions add to it,
 		// and so does the user. An unknown function leaves the result untyped
 		// rather than failing the query.
-		return exprType{nullable: true}, nil
+		return exprType{
+			nullable:    true,
+			nullability: nullability.Fallback(true),
+		}, nil
 	}
 	p := a.pickOverload(overloads, argOIDs)
 	// An argument that is a bare placeholder takes the parameter's type,
@@ -926,6 +993,21 @@ func (a *analyzer) typeFuncCall(f *ast.FuncCall) (exprType, error) {
 	if !p.NeverNull && anyNullable && a.cat.PropagatesNullable() {
 		ret.nullable = true
 	}
+	rule := nullability.RuleFunction
+	detail := fmt.Sprintf("function %s follows the existing return-nullability rule", name)
+	if _, aggregate := aggregateNames[name]; aggregate {
+		rule = nullability.RuleAggregateNullable
+		detail = fmt.Sprintf("aggregate %s returns NULL when its input set has no non-NULL values", name)
+		if !ret.nullable {
+			rule = nullability.RuleAggregateNotNull
+			detail = fmt.Sprintf("aggregate %s is non-NULL under the existing function catalog", name)
+		}
+	}
+	if name == "count" {
+		rule = nullability.RuleAggregateCount
+		detail = "COUNT may skip NULL inputs but still returns a row value"
+	}
+	ret.nullability = nullability.QueryRule(ret.nullable, rule, detail)
 	return ret, nil
 }
 
@@ -1139,6 +1221,13 @@ func funcCallName(f *ast.FuncCall) string {
 	return ""
 }
 
+var aggregateNames = map[string]struct{}{
+	"sum": {}, "avg": {}, "min": {}, "max": {}, "array_agg": {}, "json_agg": {},
+	"jsonb_agg": {}, "string_agg": {}, "bool_and": {}, "bool_or": {}, "every": {},
+	"stddev": {}, "stddev_pop": {}, "stddev_samp": {}, "variance": {},
+	"var_pop": {}, "var_samp": {},
+}
+
 func (a *analyzer) typeTypeCast(c *ast.TypeCast) (exprType, error) {
 	if c.TypeName == nil {
 		return exprType{}, fmt.Errorf("cast: missing target type")
@@ -1164,5 +1253,6 @@ func (a *analyzer) typeTypeCast(c *ast.TypeCast) (exprType, error) {
 		return exprType{}, err
 	}
 	t.nullable = t.nullable || arg.nullable
+	t.nullability = nullability.QueryRule(t.nullable, nullability.RuleCast, "a cast preserves the source expression's nullability under the existing inference")
 	return t, nil
 }

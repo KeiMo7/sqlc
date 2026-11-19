@@ -3,6 +3,7 @@ package compiler
 import (
 	"fmt"
 
+	"github.com/sqlc-dev/sqlc/internal/nullability"
 	"github.com/sqlc-dev/sqlc/internal/sql/ast"
 	"github.com/sqlc-dev/sqlc/internal/sql/catalog"
 	"github.com/sqlc-dev/sqlc/internal/sql/preprocess"
@@ -65,15 +66,17 @@ func (comp *Compiler) buildQueryCatalog(c *catalog.Catalog, node ast.Node, embed
 
 func ConvertColumn(rel *ast.TableName, c *catalog.Column) *Column {
 	return &Column{
-		Table:     rel,
-		Name:      c.Name,
-		DataType:  dataType(&c.Type),
-		NotNull:   c.IsNotNull,
-		Unsigned:  c.IsUnsigned,
-		IsArray:   c.IsArray,
-		ArrayDims: c.ArrayDims,
-		Type:      &c.Type,
-		Length:    c.Length,
+		Table:       rel,
+		Name:        c.Name,
+		DataType:    dataType(&c.Type),
+		NotNull:     c.IsNotNull,
+		Unsigned:    c.IsUnsigned,
+		IsArray:     c.IsArray,
+		ArrayDims:   c.ArrayDims,
+		Type:        &c.Type,
+		Length:      c.Length,
+		HasDefault:  c.HasDefault,
+		Nullability: c.Nullability,
 	}
 }
 
@@ -88,9 +91,28 @@ func (qc QueryCatalog) GetTable(rel *ast.TableName) (*Table, error) {
 	}
 	var cols []*Column
 	for _, c := range src.Columns {
-		cols = append(cols, ConvertColumn(rel, c))
+		col := ConvertColumn(rel, c)
+		if col.Nullability == nil {
+			col.Nullability = nullability.SchemaColumn(rel.Schema, rel.Name, c.Name, c.IsNotNull, c.HasDefault)
+		}
+		if src.IsView {
+			col.Nullability = col.Nullability.Append(
+				nullability.RuleViewProjected,
+				nullability.CauseQuery,
+				fmt.Sprintf("column %s is read through view %s; its conclusion comes from the view definition",
+					c.Name, qualifiedRelation(rel)),
+			)
+		}
+		cols = append(cols, col)
 	}
-	return &Table{Rel: rel, Columns: cols}, nil
+	return &Table{Rel: rel, Columns: cols, IsView: src.IsView}, nil
+}
+
+func qualifiedRelation(rel *ast.TableName) string {
+	if rel.Schema != "" {
+		return rel.Schema + "." + rel.Name
+	}
+	return rel.Name
 }
 
 func (qc QueryCatalog) GetFunc(rel *ast.FuncName) (*Function, error) {

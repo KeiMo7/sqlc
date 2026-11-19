@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "filters": {},
+  "queries": [
+    {
+      "query_id": "query.sql:TotalScore",
+      "query_name": "TotalScore",
+      "filename": "query.sql",
+      "engine": "postgresql",
+      "package": "pg",
+      "sql": "SELECT sum(score) AS total FROM users",
+      "columns": [
+        {
+          "position": 1,
+          "field": "total",
+          "data_type": "bigint",
+          "nullable": false,
+          "cause": "query",
+          "rule": "query.aggregate.not_null",
+          "reason": "aggregate sum is marked non-NULL by the existing function catalog",
+          "steps": [
+            {
+              "nullable": false,
+              "cause": "query",
+              "rule": "query.aggregate.not_null",
+              "detail": "aggregate sum is marked non-NULL by the existing function catalog"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_id": "query.sql:TotalScore",
+      "query_name": "TotalScore",
+      "filename": "query.sql",
+      "engine": "sqlite",
+      "package": "sqlite",
+      "sql": "SELECT sum(score) AS total FROM users",
+      "columns": [
+        {
+          "position": 1,
+          "field": "total",
+          "data_type": "real",
+          "nullable": true,
+          "cause": "query",
+          "rule": "query.aggregate.nullable",
+          "reason": "aggregate sum returns NULL when its input set is empty",
+          "steps": [
+            {
+              "nullable": true,
+              "cause": "query",
+              "rule": "query.aggregate.nullable",
+              "detail": "aggregate sum returns NULL when its input set is empty"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "fields": [
+    {
+      "column": "total",
+      "conclusions": [
+        {
+          "query_id": "query.sql:TotalScore",
+          "engine": "postgresql",
+          "package": "pg",
+          "nullable": false,
+          "cause": "query",
+          "rule": "query.aggregate.not_null"
+        },
+        {
+          "query_id": "query.sql:TotalScore",
+          "engine": "sqlite",
+          "package": "sqlite",
+          "nullable": true,
+          "cause": "query",
+          "rule": "query.aggregate.nullable"
+        }
+      ]
+    }
+  ],
+  "cross_query_differences": [
+    {
+      "key": "total",
+      "reason": "the same source column has different conclusions because the queries apply different rules: query.sql:TotalScore via query.aggregate.not_null (query); query.sql:TotalScore via query.aggregate.nullable (query)",
+      "conclusions": [
+        {
+          "query_id": "query.sql:TotalScore",
+          "engine": "postgresql",
+          "package": "pg",
+          "nullable": false,
+          "cause": "query",
+          "rule": "query.aggregate.not_null"
+        },
+        {
+          "query_id": "query.sql:TotalScore",
+          "engine": "sqlite",
+          "package": "sqlite",
+          "nullable": true,
+          "cause": "query",
+          "rule": "query.aggregate.nullable"
+        }
+      ]
+    }
+  ],
+  "dialect_differences": [
+    {
+      "query_name": "TotalScore",
+      "field": "total",
+      "reason": "the same query and field reach different nullability conclusions in different database dialects",
+      "conclusions": [
+        {
+          "query_id": "query.sql:TotalScore",
+          "engine": "postgresql",
+          "package": "pg",
+          "nullable": false,
+          "cause": "query",
+          "rule": "query.aggregate.not_null"
+        },
+        {
+          "query_id": "query.sql:TotalScore",
+          "engine": "sqlite",
+          "package": "sqlite",
+          "nullable": true,
+          "cause": "query",
+          "rule": "query.aggregate.nullable"
+        }
+      ]
+    }
+  ]
+}

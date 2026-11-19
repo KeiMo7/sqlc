@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sqlc-dev/sqlc/internal/core"
+	"github.com/sqlc-dev/sqlc/internal/nullability"
 	"github.com/sqlc-dev/sqlc/internal/sql/ast"
 )
 
@@ -45,6 +46,7 @@ func (a *analyzer) projectTarget(rt *ast.ResTarget) error {
 		NotNull:            !t.nullable,
 		SourceClassOID:     t.sourceClassOID,
 		SourceAttributeOID: t.sourceAttributeOID,
+		Nullability:        t.nullability,
 	}
 	col.DataType, col.IsArray = a.typeNameOf(t)
 	col.Type = a.typeExprOf(t)
@@ -101,6 +103,7 @@ func (a *analyzer) decorateSource(col *core.Column, attOID int64, tableAlias str
 	col.IsPrimaryKey = ad.IsPrimaryKey
 	col.IsUnique = ad.IsUnique
 	col.IsAutoIncrement = ad.AutoIncrement
+	col.Nullability = nullability.SchemaColumn(ad.Schema, ad.Table, ad.Column, ad.NotNull, ad.HasDefault)
 }
 
 // targetName picks the output name for a target. fields is the already
@@ -151,6 +154,7 @@ func (a *analyzer) emitStar(rt *ast.ResTarget, fields []string) {
 				NotNull:            c.NotNull,
 				SourceClassOID:     rel.classOID,
 				SourceAttributeOID: c.AttOID,
+				Nullability:        c.Nullability,
 			}
 			t := exprType{typeOID: c.TypeOID, expr: c.Type, nullable: !c.NotNull}
 			col.DataType, col.IsArray = a.typeNameOf(t)

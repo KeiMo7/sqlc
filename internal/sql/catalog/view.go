@@ -27,6 +27,7 @@ func (c *Catalog) createView(stmt *ast.ViewStmt, colGen columnGenerator) error {
 			Name:    *stmt.View.Relname,
 		},
 		Columns: cols,
+		IsView:  true,
 	}
 
 	ns := tbl.Rel.Schema

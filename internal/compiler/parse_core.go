@@ -107,11 +107,12 @@ func (c *Compiler) parseQueryCore(raw *ast.RawStmt, src string, pre *preprocess.
 
 func coreColumn(c core.Column) *Column {
 	col := &Column{
-		Name:     c.Name,
-		DataType: c.DataType,
-		NotNull:  c.NotNull,
-		IsArray:  c.IsArray,
-		TypeExpr: c.Type,
+		Name:        c.Name,
+		DataType:    c.DataType,
+		NotNull:     c.NotNull,
+		IsArray:     c.IsArray,
+		TypeExpr:    c.Type,
+		Nullability: c.Nullability,
 	}
 	describeType(col, c.Type)
 	if c.Source != nil && c.Source.Table != "" {

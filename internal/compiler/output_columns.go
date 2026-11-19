@@ -3,8 +3,10 @@ package compiler
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/sqlc-dev/sqlc/internal/config"
+	"github.com/sqlc-dev/sqlc/internal/nullability"
 	"github.com/sqlc-dev/sqlc/internal/sql/ast"
 	"github.com/sqlc-dev/sqlc/internal/sql/astutils"
 	"github.com/sqlc-dev/sqlc/internal/sql/catalog"
@@ -26,17 +28,37 @@ func (c *Compiler) OutputColumns(stmt ast.Node) ([]*catalog.Column, error) {
 	catCols := make([]*catalog.Column, 0, len(cols))
 	for _, col := range cols {
 		catCols = append(catCols, &catalog.Column{
-			Name:       col.Name,
-			Type:       ast.TypeName{Name: col.DataType},
-			IsNotNull:  col.NotNull,
-			IsUnsigned: col.Unsigned,
-			IsArray:    col.IsArray,
-			ArrayDims:  col.ArrayDims,
-			Comment:    col.Comment,
-			Length:     col.Length,
+			Name:        col.Name,
+			Type:        ast.TypeName{Name: col.DataType},
+			IsNotNull:   col.NotNull,
+			IsUnsigned:  col.Unsigned,
+			IsArray:     col.IsArray,
+			ArrayDims:   col.ArrayDims,
+			Comment:     col.Comment,
+			Length:      col.Length,
+			HasDefault:  col.HasDefault,
+			Nullability: col.Nullability,
 		})
 	}
 	return catCols, nil
+}
+
+func (c *Compiler) origin(nullable bool, cause nullability.Cause, rule, detail string) *nullability.Origin {
+	if !c.explainNullability {
+		return nil
+	}
+	return nullability.New(nullable, cause, rule, detail)
+}
+
+func (c *Compiler) queryOrigin(nullable bool, rule, detail string) *nullability.Origin {
+	return c.origin(nullable, nullability.CauseQuery, rule, detail)
+}
+
+func (c *Compiler) fallbackOrigin(nullable bool) *nullability.Origin {
+	if !c.explainNullability {
+		return nil
+	}
+	return nullability.Fallback(nullable)
 }
 
 func hasStarRef(cf *ast.ColumnRef) bool {
@@ -142,15 +164,40 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 			}
 			switch n.Val.(type) {
 			case *ast.String:
-				cols = append(cols, &Column{Name: name, DataType: "text", NotNull: true})
+				cols = append(cols, &Column{
+					Name:        name,
+					DataType:    "text",
+					NotNull:     true,
+					Nullability: c.queryOrigin(true, nullability.RuleConstant, "a string literal is never NULL"),
+				})
 			case *ast.Integer:
-				cols = append(cols, &Column{Name: name, DataType: "int", NotNull: true})
+				cols = append(cols, &Column{
+					Name:        name,
+					DataType:    "int",
+					NotNull:     true,
+					Nullability: c.queryOrigin(true, nullability.RuleConstant, "an integer literal is never NULL"),
+				})
 			case *ast.Float:
-				cols = append(cols, &Column{Name: name, DataType: "float", NotNull: true})
+				cols = append(cols, &Column{
+					Name:        name,
+					DataType:    "float",
+					NotNull:     true,
+					Nullability: c.queryOrigin(true, nullability.RuleConstant, "a float literal is never NULL"),
+				})
 			case *ast.Boolean:
-				cols = append(cols, &Column{Name: name, DataType: "bool", NotNull: true})
+				cols = append(cols, &Column{
+					Name:        name,
+					DataType:    "bool",
+					NotNull:     true,
+					Nullability: c.queryOrigin(true, nullability.RuleConstant, "a boolean literal is never NULL"),
+				})
 			default:
-				cols = append(cols, &Column{Name: name, DataType: "any", NotNull: false})
+				cols = append(cols, &Column{
+					Name:        name,
+					DataType:    "any",
+					NotNull:     false,
+					Nullability: c.fallbackOrigin(false),
+				})
 			}
 
 		case *ast.A_Expr:
@@ -161,11 +208,26 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 			switch op := astutils.Join(n.Name, ""); {
 			case lang.IsComparisonOperator(op):
 				// TODO: Generate a name for these operations
-				cols = append(cols, &Column{Name: name, DataType: "bool", NotNull: true})
+				cols = append(cols, &Column{
+					Name:        name,
+					DataType:    "bool",
+					NotNull:     true,
+					Nullability: c.queryOrigin(true, nullability.RulePredicate, "a comparison expression is treated as a non-NULL predicate"),
+				})
 			case lang.IsMathematicalOperator(op):
-				cols = append(cols, &Column{Name: name, DataType: "int", NotNull: true})
+				cols = append(cols, &Column{
+					Name:        name,
+					DataType:    "int",
+					NotNull:     true,
+					Nullability: c.queryOrigin(true, nullability.RuleOperator, "the existing operator inference treats a mathematical expression as NOT NULL"),
+				})
 			default:
-				cols = append(cols, &Column{Name: name, DataType: "any", NotNull: false})
+				cols = append(cols, &Column{
+					Name:        name,
+					DataType:    "any",
+					NotNull:     false,
+					Nullability: c.fallbackOrigin(false),
+				})
 			}
 
 		case *ast.BoolExpr:
@@ -188,7 +250,16 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 					}
 				}
 			}
-			cols = append(cols, &Column{Name: name, DataType: "bool", NotNull: notNull})
+			detail := "the existing boolean-expression inference treats this result as nullable"
+			if notNull {
+				detail = "a NULL test or EXISTS predicate is never NULL"
+			}
+			cols = append(cols, &Column{
+				Name:        name,
+				DataType:    "bool",
+				NotNull:     notNull,
+				Nullability: c.queryOrigin(notNull, nullability.RuleBoolean, detail),
+			})
 
 		case *ast.CaseExpr:
 			name := ""
@@ -211,22 +282,53 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 				// TODO Validate column names
 				col := toColumn(tc.TypeName)
 				col.Name = name
+				col.Nullability = c.queryOrigin(col.NotNull, nullability.RuleCase, "CASE takes the nullability of its default result")
 				cols = append(cols, col)
 			} else if aconst, ok := n.Defresult.(*ast.A_Const); ok {
 				switch aconst.Val.(type) {
 				case *ast.String:
-					cols = append(cols, &Column{Name: name, DataType: "text", NotNull: true})
+					cols = append(cols, &Column{
+						Name:        name,
+						DataType:    "text",
+						NotNull:     true,
+						Nullability: c.queryOrigin(true, nullability.RuleCase, "CASE has a non-NULL string default"),
+					})
 				case *ast.Integer:
-					cols = append(cols, &Column{Name: name, DataType: "int", NotNull: true})
+					cols = append(cols, &Column{
+						Name:        name,
+						DataType:    "int",
+						NotNull:     true,
+						Nullability: c.queryOrigin(true, nullability.RuleCase, "CASE has a non-NULL integer default"),
+					})
 				case *ast.Float:
-					cols = append(cols, &Column{Name: name, DataType: "float", NotNull: true})
+					cols = append(cols, &Column{
+						Name:        name,
+						DataType:    "float",
+						NotNull:     true,
+						Nullability: c.queryOrigin(true, nullability.RuleCase, "CASE has a non-NULL float default"),
+					})
 				case *ast.Boolean:
-					cols = append(cols, &Column{Name: name, DataType: "bool", NotNull: true})
+					cols = append(cols, &Column{
+						Name:        name,
+						DataType:    "bool",
+						NotNull:     true,
+						Nullability: c.queryOrigin(true, nullability.RuleCase, "CASE has a non-NULL boolean default"),
+					})
 				default:
-					cols = append(cols, &Column{Name: name, DataType: "any", NotNull: false})
+					cols = append(cols, &Column{
+						Name:        name,
+						DataType:    "any",
+						NotNull:     false,
+						Nullability: c.fallbackOrigin(false),
+					})
 				}
 			} else {
-				cols = append(cols, &Column{Name: name, DataType: "any", NotNull: false})
+				cols = append(cols, &Column{
+					Name:        name,
+					DataType:    "any",
+					NotNull:     false,
+					Nullability: c.fallbackOrigin(false),
+				})
 			}
 
 		case *ast.CoalesceExpr:
@@ -256,10 +358,27 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 			}
 			if firstColumn != nil {
 				firstColumn.NotNull = shouldNotBeNull
+				detail := "COALESCE is nullable because every argument is nullable"
+				if shouldNotBeNull {
+					detail = "COALESCE is NOT NULL because at least one argument is a non-NULL constant or column"
+				}
+				if c.explainNullability {
+					firstColumn.Nullability = firstColumn.Nullability.Then(
+						shouldNotBeNull,
+						nullability.CauseQuery,
+						nullability.RuleCoalesce,
+						detail,
+					)
+				}
 				firstColumn.skipTableRequiredCheck = true
 				cols = append(cols, firstColumn)
 			} else {
-				cols = append(cols, &Column{Name: name, DataType: "any", NotNull: false})
+				cols = append(cols, &Column{
+					Name:        name,
+					DataType:    "any",
+					NotNull:     false,
+					Nullability: c.fallbackOrigin(false),
+				})
 			}
 
 		case *ast.ColumnRef:
@@ -268,8 +387,9 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 				// add a column with a reference to an embedded table
 				if embed, ok := qc.embeds.Find(n.Location, res.Location); ok {
 					cols = append(cols, &Column{
-						Name:       embed.Table.Name,
-						EmbedTable: embed.Table,
+						Name:        embed.Table.Name,
+						EmbedTable:  embed.Table,
+						Nullability: c.fallbackOrigin(false),
 					})
 					continue
 				}
@@ -302,6 +422,7 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 							IsArray:      c.IsArray,
 							ArrayDims:    c.ArrayDims,
 							Length:       c.Length,
+							Nullability:  c.Nullability,
 						})
 					}
 				}
@@ -322,17 +443,35 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 			}
 			fun, err := qc.catalog.ResolveFuncCall(n)
 			if err == nil {
+				nullable := fun.ReturnTypeNullable
+				funcName := legacyFuncName(n)
+				rule := nullability.RuleFunction
+				detail := fmt.Sprintf("function %s returns a %s value according to the catalog", funcName, nullableWord(nullable))
+				if aggregate, aggregateName := aggregateRule(n); aggregate {
+					rule = aggregateName
+					if rule == nullability.RuleAggregateCount {
+						detail = "COUNT always returns a row value and is not NULL"
+					} else if nullable {
+						rule = nullability.RuleAggregateNullable
+						detail = fmt.Sprintf("aggregate %s returns NULL when its input set is empty", funcName)
+					} else {
+						rule = nullability.RuleAggregateNotNull
+						detail = fmt.Sprintf("aggregate %s is marked non-NULL by the existing function catalog", funcName)
+					}
+				}
 				cols = append(cols, &Column{
-					Name:       name,
-					DataType:   dataType(fun.ReturnType),
-					NotNull:    !fun.ReturnTypeNullable,
-					IsFuncCall: true,
+					Name:        name,
+					DataType:    dataType(fun.ReturnType),
+					NotNull:     !nullable,
+					IsFuncCall:  true,
+					Nullability: c.queryOrigin(nullable, rule, detail),
 				})
 			} else {
 				cols = append(cols, &Column{
-					Name:       name,
-					DataType:   "any",
-					IsFuncCall: true,
+					Name:        name,
+					DataType:    "any",
+					IsFuncCall:  true,
+					Nullability: c.fallbackOrigin(false),
 				})
 			}
 
@@ -343,7 +482,12 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 			}
 			switch n.SubLinkType {
 			case ast.EXISTS_SUBLINK:
-				cols = append(cols, &Column{Name: name, DataType: "bool", NotNull: true})
+				cols = append(cols, &Column{
+					Name:        name,
+					DataType:    "bool",
+					NotNull:     true,
+					Nullability: c.queryOrigin(true, nullability.RuleSubqueryExists, "EXISTS returns a boolean and is never NULL"),
+				})
 			case ast.EXPR_SUBLINK:
 				subcols, err := c.outputColumns(qc, n.Subselect)
 				if err != nil {
@@ -353,9 +497,20 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 				if res.Name != nil {
 					first.Name = *res.Name
 				}
+				first.Nullability = first.Nullability.Then(
+					!first.NotNull,
+					nullability.CauseQuery,
+					nullability.RuleSubqueryScalar,
+					"a scalar subquery takes its inner column's conclusion under the existing inference",
+				)
 				cols = append(cols, first)
 			default:
-				cols = append(cols, &Column{Name: name, DataType: "any", NotNull: false})
+				cols = append(cols, &Column{
+					Name:        name,
+					DataType:    "any",
+					NotNull:     false,
+					Nullability: c.fallbackOrigin(false),
+				})
 			}
 
 		case *ast.TypeCast:
@@ -378,6 +533,11 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 					col.NotNull = false
 				}
 			}
+			col.Nullability = c.queryOrigin(
+				!col.NotNull,
+				nullability.RuleCast,
+				"a cast preserves the source expression's nullability under the existing inference",
+			)
 			cols = append(cols, col)
 
 		case *ast.SelectStmt:
@@ -389,6 +549,11 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 			if res.Name != nil {
 				first.Name = *res.Name
 			}
+			first.Nullability = first.Nullability.Append(
+				nullability.RuleSubqueryScalar,
+				nullability.CauseQuery,
+				"the field comes from a nested SELECT",
+			)
 			cols = append(cols, first)
 
 		default:
@@ -396,7 +561,12 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 			if res.Name != nil {
 				name = *res.Name
 			}
-			cols = append(cols, &Column{Name: name, DataType: "any", NotNull: false})
+			cols = append(cols, &Column{
+				Name:        name,
+				DataType:    "any",
+				NotNull:     false,
+				Nullability: c.fallbackOrigin(false),
+			})
 
 		}
 	}
@@ -409,10 +579,34 @@ func (c *Compiler) outputColumns(qc *QueryCatalog, node ast.Node) ([]*Column, er
 			for _, f := range n.FromClause.Items {
 				res := isTableRequired(f, col, tableRequired)
 				if res != tableNotFound {
-					col.NotNull = res == tableRequired
+					notNull := res == tableRequired
+					col.NotNull = notNull
+					if c.explainNullability && !notNull {
+						detail := fmt.Sprintf("column %s is on the nullable side of an outer join", qualifiedRelation(col.Table))
+						if col.Nullability != nil && col.Nullability.Nullable {
+							col.Nullability = col.Nullability.Append(
+								nullability.RuleOuterJoin,
+								nullability.CauseQuery,
+								detail+"; it was already nullable",
+							)
+						} else {
+							col.Nullability = col.Nullability.Then(
+								true,
+								nullability.CauseQuery,
+								nullability.RuleOuterJoin,
+								detail,
+							)
+						}
+					}
 					break
 				}
 			}
+		}
+	}
+
+	if c.explainNullability {
+		for _, col := range cols {
+			col.Nullability = nullability.Exact(col.Nullability, !col.NotNull)
 		}
 	}
 
@@ -465,6 +659,41 @@ func isTableRequired(n ast.Node, col *Column, prior int) int {
 	}
 
 	return tableNotFound
+}
+
+func aggregateRule(call *ast.FuncCall) (bool, string) {
+	name := legacyFuncName(call)
+	if name == "count" || strings.HasSuffix(name, ".count") {
+		return true, nullability.RuleAggregateCount
+	}
+	switch name {
+	case "sum", "avg", "min", "max", "array_agg", "json_agg", "jsonb_agg",
+		"string_agg", "bool_and", "bool_or", "every", "stddev", "stddev_pop",
+		"stddev_samp", "variance", "var_pop", "var_samp":
+		return true, nullability.RuleAggregateNullable
+	}
+	return false, ""
+}
+
+func legacyFuncName(call *ast.FuncCall) string {
+	if call == nil {
+		return ""
+	}
+	if call.Func != nil && call.Func.Name != "" {
+		return strings.ToLower(call.Func.Name)
+	}
+	name := strings.ToLower(astutils.Join(call.Funcname, "."))
+	if i := strings.LastIndex(name, "."); i >= 0 {
+		name = name[i+1:]
+	}
+	return name
+}
+
+func nullableWord(nullable bool) string {
+	if nullable {
+		return "nullable"
+	}
+	return "non-NULL"
 }
 
 type tableVisitor struct {
@@ -704,6 +933,8 @@ func outputColumnRefs(res *ast.ResTarget, tables []*Table, node *ast.ColumnRef) 
 					Length:       c.Length,
 					EmbedTable:   c.EmbedTable,
 					OriginalName: c.Name,
+					HasDefault:   c.HasDefault,
+					Nullability:  c.Nullability,
 				})
 			}
 		}

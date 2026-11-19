@@ -25,24 +25,51 @@ type ColumnDef struct {
 	IsHidden bool `json:"is_hidden"`
 
 	// From pg.ColumnDef
-	Inhcount      int            `json:"inhcount"`
-	IsLocal       bool           `json:"is_local"`
-	IsFromType    bool           `json:"is_from_type"`
-	IsFromParent  bool           `json:"is_from_parent"`
-	Storage       byte           `json:"storage"`
-	RawDefault    Node           `json:"raw_default,omitempty"`
-	CookedDefault Node           `json:"cooked_default,omitempty"`
-	Identity      byte           `json:"identity"`
-	CollClause    *CollateClause `json:"coll_clause,omitempty"`
-	CollOid       Oid            `json:"coll_oid"`
-	Constraints   *List          `json:"constraints,omitempty"`
-	Fdwoptions    *List          `json:"fdwoptions,omitempty"`
-	Location      int            `json:"location"`
-	Comment       string         `json:"comment"`
+	Inhcount      int  `json:"inhcount"`
+	IsLocal       bool `json:"is_local"`
+	IsFromType    bool `json:"is_from_type"`
+	IsFromParent  bool `json:"is_from_parent"`
+	Storage       byte `json:"storage"`
+	RawDefault    Node `json:"raw_default,omitempty"`
+	CookedDefault Node `json:"cooked_default,omitempty"`
+	// HasDefaultValue records a default an engine's parser identified without
+	// retaining the expression itself.
+	HasDefaultValue bool           `json:"-"`
+	Identity        byte           `json:"identity"`
+	CollClause      *CollateClause `json:"coll_clause,omitempty"`
+	CollOid         Oid            `json:"coll_oid"`
+	Constraints     *List          `json:"constraints,omitempty"`
+	Fdwoptions      *List          `json:"fdwoptions,omitempty"`
+	Location        int            `json:"location"`
+	Comment         string         `json:"comment"`
 }
 
 func (n *ColumnDef) Pos() int {
 	return n.Location
+}
+
+// HasDefault reports whether the column declares a default. Engines differ in
+// where their parser puts it: some fill RawDefault or CookedDefault, while
+// others record a constraint carrying RawExpr or CookedExpr.
+func (n *ColumnDef) HasDefault() bool {
+	if n == nil {
+		return false
+	}
+	if n.HasDefaultValue {
+		return true
+	}
+	if n.RawDefault != nil || n.CookedDefault != nil {
+		return true
+	}
+	if n.Constraints == nil {
+		return false
+	}
+	for _, item := range n.Constraints.Items {
+		if c, ok := item.(*Constraint); ok && (c.RawExpr != nil || c.CookedExpr != nil) {
+			return true
+		}
+	}
+	return false
 }
 
 func (n *ColumnDef) Format(buf *TrackedBuffer, d format.Dialect) {

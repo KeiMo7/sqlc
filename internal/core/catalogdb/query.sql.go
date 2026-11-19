@@ -12,18 +12,19 @@ import (
 )
 
 const classAttributes = `-- name: ClassAttributes :many
-SELECT oid, name, type_oid, not_null, hidden
+SELECT oid, name, type_oid, not_null, has_default, hidden
 FROM sql_attribute
 WHERE class_oid = ?
 ORDER BY num
 `
 
 type ClassAttributesRow struct {
-	Oid     int64
-	Name    string
-	TypeOid int64
-	NotNull int64
-	Hidden  int64
+	Oid        int64
+	Name       string
+	TypeOid    int64
+	NotNull    int64
+	HasDefault int64
+	Hidden     int64
 }
 
 func (q *Queries) ClassAttributes(ctx context.Context, classOid int64) ([]ClassAttributesRow, error) {
@@ -40,6 +41,7 @@ func (q *Queries) ClassAttributes(ctx context.Context, classOid int64) ([]ClassA
 			&i.Name,
 			&i.TypeOid,
 			&i.NotNull,
+			&i.HasDefault,
 			&i.Hidden,
 		); err != nil {
 			return nil, err
@@ -858,7 +860,8 @@ func (q *Queries) ListTypeRewrites(ctx context.Context, dialectOid int64) ([]Lis
 
 const lookupAttribute = `-- name: LookupAttribute :one
 SELECT ns.name AS schema_name, cls.name AS table_name, a.name AS column_name, a.num,
-       a.decl_type, a.auto_increment, a.is_primary_key, a.is_unique, a.not_null
+       a.decl_type, a.auto_increment, a.is_primary_key, a.is_unique, a.not_null,
+       a.has_default
 FROM sql_attribute a
 JOIN sql_class cls ON cls.oid = a.class_oid
 JOIN sql_namespace ns ON ns.oid = cls.namespace_oid
@@ -875,6 +878,7 @@ type LookupAttributeRow struct {
 	IsPrimaryKey  int64
 	IsUnique      int64
 	NotNull       int64
+	HasDefault    int64
 }
 
 func (q *Queries) LookupAttribute(ctx context.Context, oid int64) (LookupAttributeRow, error) {
@@ -890,6 +894,7 @@ func (q *Queries) LookupAttribute(ctx context.Context, oid int64) (LookupAttribu
 		&i.IsPrimaryKey,
 		&i.IsUnique,
 		&i.NotNull,
+		&i.HasDefault,
 	)
 	return i, err
 }

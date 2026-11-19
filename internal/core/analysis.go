@@ -1,5 +1,7 @@
 package core
 
+import "github.com/sqlc-dev/sqlc/internal/nullability"
+
 type Command string
 
 const (
@@ -57,17 +59,18 @@ type Column struct {
 	DataType string `json:"data_type"`
 	// Type is the column's type as an expression, carrying what DataType
 	// and IsArray flatten away: arguments, nesting and inner nullability.
-	Type               *TypeExpr     `json:"type,omitempty"`
-	TypeOID            int64         `json:"type_oid,omitempty"`
-	NotNull            bool          `json:"not_null"`
-	IsArray            bool          `json:"is_array,omitempty"`
-	SourceClassOID     int64         `json:"source_class_oid,omitempty"`
-	SourceAttributeOID int64         `json:"source_attribute_oid,omitempty"`
-	Source             *ColumnSource `json:"source,omitempty"`
-	DeclType           string        `json:"decl_type,omitempty"`
-	IsPrimaryKey       bool          `json:"is_primary_key,omitempty"`
-	IsUnique           bool          `json:"is_unique,omitempty"`
-	IsAutoIncrement    bool          `json:"is_auto_increment,omitempty"`
+	Type               *TypeExpr           `json:"type,omitempty"`
+	TypeOID            int64               `json:"type_oid,omitempty"`
+	NotNull            bool                `json:"not_null"`
+	IsArray            bool                `json:"is_array,omitempty"`
+	SourceClassOID     int64               `json:"source_class_oid,omitempty"`
+	SourceAttributeOID int64               `json:"source_attribute_oid,omitempty"`
+	Source             *ColumnSource       `json:"source,omitempty"`
+	DeclType           string              `json:"decl_type,omitempty"`
+	IsPrimaryKey       bool                `json:"is_primary_key,omitempty"`
+	IsUnique           bool                `json:"is_unique,omitempty"`
+	IsAutoIncrement    bool                `json:"is_auto_increment,omitempty"`
+	Nullability        *nullability.Origin `json:"nullability,omitempty"`
 }
 
 type Parameter struct {

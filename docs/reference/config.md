@@ -28,7 +28,20 @@ sql:
     go:
       package: "authors"
       out: "mysql"
+nullability:
+  explain: true
+  output: "nullability.json"
+  tables:
+    - "users"
+  fields:
+    - "users.email"
 ```
+
+The top-level `nullability` mapping is optional and disabled by default. When
+`explain` is true, `sqlc generate` writes an independent JSON sidecar describing
+why the existing analysis made each output field nullable or non-nullable.
+Generated code is not changed. `output` defaults to `sqlc-nullability.json`;
+`tables` and `fields` filter the sidecar without changing generation.
 
 ### sql
 

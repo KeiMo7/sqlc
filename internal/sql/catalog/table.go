@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/sqlc-dev/sqlc/internal/core"
+	"github.com/sqlc-dev/sqlc/internal/nullability"
 	"github.com/sqlc-dev/sqlc/internal/sql/ast"
 	"github.com/sqlc-dev/sqlc/internal/sql/sqlerr"
 )
@@ -17,6 +18,7 @@ type Table struct {
 	Rel     *ast.TableName
 	Columns []*Column
 	Comment string
+	IsView  bool
 }
 
 func checkMissing(err error, missingOK bool) error {
@@ -134,6 +136,9 @@ type Column struct {
 	// arguments and nesting Type and IsArray flatten away. It is unset
 	// on the legacy path.
 	TypeExpr *core.TypeExpr
+
+	HasDefault  bool
+	Nullability *nullability.Origin
 
 	linkedType bool
 }
@@ -348,14 +353,16 @@ func (c *Catalog) createTable(stmt *ast.CreateTableStmt) error {
 
 func (c *Catalog) defineColumn(table *ast.TableName, col *ast.ColumnDef) (*Column, error) {
 	tc := &Column{
-		Name:       col.Colname,
-		Type:       *col.TypeName,
-		IsNotNull:  col.IsNotNull,
-		IsUnsigned: col.IsUnsigned,
-		IsArray:    col.IsArray,
-		ArrayDims:  col.ArrayDims,
-		Comment:    col.Comment,
-		Length:     col.Length,
+		Name:        col.Colname,
+		Type:        *col.TypeName,
+		IsNotNull:   col.IsNotNull,
+		IsUnsigned:  col.IsUnsigned,
+		IsArray:     col.IsArray,
+		ArrayDims:   col.ArrayDims,
+		Comment:     col.Comment,
+		Length:      col.Length,
+		HasDefault:  col.HasDefault(),
+		Nullability: nullability.SchemaColumn(table.Schema, table.Name, col.Colname, col.IsNotNull, col.HasDefault()),
 	}
 	if col.Vals != nil {
 		typeName := ast.TypeName{
@@ -490,6 +497,7 @@ func (c *Catalog) createTableAs(stmt *ast.CreateTableAsStmt, colGen columnGenera
 			Name:    *stmt.Into.Rel.Relname,
 		},
 		Columns: cols,
+		IsView:  true,
 	}
 
 	ns := tbl.Rel.Schema

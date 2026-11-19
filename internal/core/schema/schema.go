@@ -174,6 +174,7 @@ func applyCreateTable(cat *core.Catalog, stmt *ast.CreateTableStmt) error {
 			TypeOID:      typeOID,
 			Num:          i + 1,
 			NotNull:      col.IsNotNull || col.PrimaryKey || typeNotNull(cat, typeOID),
+			HasDefault:   col.HasDefault(),
 			IsPrimaryKey: col.PrimaryKey,
 			DeclType:     declType(col.TypeName),
 			Hidden:       col.IsHidden,
@@ -246,6 +247,7 @@ func applyAlterTable(cat *core.Catalog, stmt *ast.AlterTableStmt) error {
 				TypeOID:      typeOID,
 				Num:          num,
 				NotNull:      cmd.Def.IsNotNull || cmd.Def.PrimaryKey || typeNotNull(cat, typeOID),
+				HasDefault:   cmd.Def.HasDefault(),
 				IsPrimaryKey: cmd.Def.PrimaryKey,
 				DeclType:     declType(cmd.Def.TypeName),
 			}); err != nil {

@@ -61,14 +61,27 @@ const (
 )
 
 type Config struct {
-	Version   string               `json:"version" yaml:"version"`
-	Cloud     Cloud                `json:"cloud" yaml:"cloud"`
-	Servers   []Server             `json:"servers" yaml:"servers"`
-	SQL       []SQL                `json:"sql" yaml:"sql"`
-	Overrides Overrides            `json:"overrides" yaml:"overrides"`
-	Plugins   []Plugin             `json:"plugins" yaml:"plugins"`
-	Rules     []Rule               `json:"rules" yaml:"rules"`
-	Options   map[string]yaml.Node `json:"options" yaml:"options"`
+	Version     string               `json:"version" yaml:"version"`
+	Cloud       Cloud                `json:"cloud" yaml:"cloud"`
+	Servers     []Server             `json:"servers" yaml:"servers"`
+	SQL         []SQL                `json:"sql" yaml:"sql"`
+	Overrides   Overrides            `json:"overrides" yaml:"overrides"`
+	Plugins     []Plugin             `json:"plugins" yaml:"plugins"`
+	Rules       []Rule               `json:"rules" yaml:"rules"`
+	Options     map[string]yaml.Node `json:"options" yaml:"options"`
+	Nullability Nullability          `json:"nullability" yaml:"nullability"`
+}
+
+const DefaultNullabilityOutput = "sqlc-nullability.json"
+
+// Nullability configures the optional sidecar that explains the nullability
+// conclusions the existing analysis made. It is separate from codegen and is
+// disabled unless Explain is true.
+type Nullability struct {
+	Explain bool     `json:"explain" yaml:"explain"`
+	Output  string   `json:"output,omitempty" yaml:"output"`
+	Tables  []string `json:"tables,omitempty" yaml:"tables"`
+	Fields  []string `json:"fields,omitempty" yaml:"fields"`
 }
 
 type Server struct {

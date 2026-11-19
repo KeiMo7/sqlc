@@ -345,11 +345,12 @@ func translate(node *nodes.Node) (ast.Node, error) {
 					}
 					item.Subtype = ast.AT_AddColumn
 					item.Def = &ast.ColumnDef{
-						Colname:   d.ColumnDef.Colname,
-						TypeName:  columnTypeName(rel, d.ColumnDef.TypeName),
-						IsNotNull: isNotNull(d.ColumnDef),
-						IsArray:   isArray(d.ColumnDef.TypeName),
-						ArrayDims: len(d.ColumnDef.TypeName.ArrayBounds),
+						Colname:         d.ColumnDef.Colname,
+						TypeName:        columnTypeName(rel, d.ColumnDef.TypeName),
+						IsNotNull:       isNotNull(d.ColumnDef),
+						IsArray:         isArray(d.ColumnDef.TypeName),
+						ArrayDims:       len(d.ColumnDef.TypeName.ArrayBounds),
+						HasDefaultValue: hasDefault(d.ColumnDef),
 					}
 
 				case nodes.AlterTableType_AT_AlterColumnType:
@@ -371,11 +372,12 @@ func translate(node *nodes.Node) (ast.Node, error) {
 					}
 					item.Subtype = ast.AT_AlterColumnType
 					item.Def = &ast.ColumnDef{
-						Colname:   col,
-						TypeName:  columnTypeName(rel, d.ColumnDef.TypeName),
-						IsNotNull: isNotNull(d.ColumnDef),
-						IsArray:   isArray(d.ColumnDef.TypeName),
-						ArrayDims: len(d.ColumnDef.TypeName.ArrayBounds),
+						Colname:         col,
+						TypeName:        columnTypeName(rel, d.ColumnDef.TypeName),
+						IsNotNull:       isNotNull(d.ColumnDef),
+						IsArray:         isArray(d.ColumnDef.TypeName),
+						ArrayDims:       len(d.ColumnDef.TypeName.ArrayBounds),
+						HasDefaultValue: hasDefault(d.ColumnDef),
 					}
 
 				case nodes.AlterTableType_AT_DropColumn:
@@ -471,10 +473,11 @@ func translate(node *nodes.Node) (ast.Node, error) {
 				return nil, err
 			}
 			stmt.Coldeflist.Items = append(stmt.Coldeflist.Items, &ast.ColumnDef{
-				Colname:   field.ColumnDef.Colname,
-				TypeName:  columnTypeName(rel, field.ColumnDef.TypeName),
-				IsArray:   isArray(field.ColumnDef.TypeName),
-				ArrayDims: len(field.ColumnDef.TypeName.ArrayBounds),
+				Colname:         field.ColumnDef.Colname,
+				TypeName:        columnTypeName(rel, field.ColumnDef.TypeName),
+				IsArray:         isArray(field.ColumnDef.TypeName),
+				ArrayDims:       len(field.ColumnDef.TypeName.ArrayBounds),
+				HasDefaultValue: hasDefault(field.ColumnDef),
 			})
 		}
 		return stmt, nil
@@ -527,12 +530,13 @@ func translate(node *nodes.Node) (ast.Node, error) {
 				}
 
 				create.Cols = append(create.Cols, &ast.ColumnDef{
-					Colname:    item.ColumnDef.Colname,
-					TypeName:   columnTypeName(rel, item.ColumnDef.TypeName),
-					IsNotNull:  isNotNull(item.ColumnDef) || primaryKey[item.ColumnDef.Colname],
-					IsArray:    isArray(item.ColumnDef.TypeName),
-					ArrayDims:  len(item.ColumnDef.TypeName.ArrayBounds),
-					PrimaryKey: primary,
+					Colname:         item.ColumnDef.Colname,
+					TypeName:        columnTypeName(rel, item.ColumnDef.TypeName),
+					IsNotNull:       isNotNull(item.ColumnDef) || primaryKey[item.ColumnDef.Colname],
+					IsArray:         isArray(item.ColumnDef.TypeName),
+					ArrayDims:       len(item.ColumnDef.TypeName.ArrayBounds),
+					PrimaryKey:      primary,
+					HasDefaultValue: hasDefault(item.ColumnDef),
 				})
 			}
 		}

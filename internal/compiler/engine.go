@@ -40,6 +40,10 @@ type Compiler struct {
 	coreAnalysis bool
 	coreDialect  core.Option
 
+	// explainNullability records the rule behind each existing output-column
+	// decision. It never feeds that decision back into analysis or codegen.
+	explainNullability bool
+
 	// newParser builds a parser for the configured engine, and is set for
 	// every engine either path supports. The core path analyzes statements
 	// concurrently, and a parser holds enough state that two goroutines cannot
@@ -58,6 +62,12 @@ type Option func(*Compiler)
 // this opts the remaining engines in.
 func WithCoreAnalysis() Option {
 	return func(c *Compiler) { c.coreAnalysis = true }
+}
+
+// WithNullabilityExplanation records why the existing analysis decided each
+// output column's nullability. It does not change the analysis.
+func WithNullabilityExplanation() Option {
+	return func(c *Compiler) { c.explainNullability = true }
 }
 
 func NewCompiler(conf config.SQL, combo config.CombinedSettings, parserOpts opts.Parser, options ...Option) (*Compiler, error) {

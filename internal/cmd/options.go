@@ -13,6 +13,11 @@ type Options struct {
 	Tags    []string
 	Against string
 
+	ExplainNullability bool
+	NullabilityOutput  string
+	NullabilityTables  []string
+	NullabilityFields  []string
+
 	// Testing only
 	MutateConfig func(*config.Config)
 }

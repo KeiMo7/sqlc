@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sqlc-dev/sqlc/internal/core"
+	"github.com/sqlc-dev/sqlc/internal/nullability"
 	"github.com/sqlc-dev/sqlc/internal/sql/ast"
 )
 
@@ -200,6 +201,10 @@ func findColumn(rel scopeRel, name string) (core.ClassColumn, bool) {
 }
 
 func columnType(rel scopeRel, col core.ClassColumn) exprType {
+	origin := col.Nullability
+	if origin == nil {
+		origin = nullability.SchemaColumn("", rel.alias, col.Name, col.NotNull, col.HasDefault)
+	}
 	return exprType{
 		typeOID:            col.TypeOID,
 		expr:               col.Type,
@@ -207,5 +212,6 @@ func columnType(rel scopeRel, col core.ClassColumn) exprType {
 		sourceClassOID:     rel.classOID,
 		sourceAttributeOID: col.AttOID,
 		sourceTableAlias:   rel.alias,
+		nullability:        origin,
 	}
 }

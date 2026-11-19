@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/sqlc-dev/sqlc/internal/core/catalogdb"
+	"github.com/sqlc-dev/sqlc/internal/nullability"
 )
 
 type AttributeSpec struct {
@@ -210,9 +211,11 @@ type ClassColumn struct {
 	// Type is the column's type as an expression, set for a column of a
 	// derived relation whose type the catalog holds no row for, or holds
 	// only the family of.
-	Type    *TypeExpr
-	NotNull bool
-	Hidden  bool
+	Type        *TypeExpr
+	NotNull     bool
+	Hidden      bool
+	HasDefault  bool
+	Nullability *nullability.Origin
 }
 
 // ClassColumns returns a relation's columns in ordinal order.
@@ -224,11 +227,12 @@ func (c *Catalog) ClassColumns(classOID int64) ([]ClassColumn, error) {
 	out := make([]ClassColumn, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, ClassColumn{
-			AttOID:  r.Oid,
-			Name:    r.Name,
-			TypeOID: r.TypeOid,
-			NotNull: r.NotNull != 0,
-			Hidden:  r.Hidden != 0,
+			AttOID:     r.Oid,
+			Name:       r.Name,
+			TypeOID:    r.TypeOid,
+			NotNull:    r.NotNull != 0,
+			Hidden:     r.Hidden != 0,
+			HasDefault: r.HasDefault != 0,
 		})
 	}
 	return out, nil
@@ -266,6 +270,7 @@ type AttributeDetails struct {
 	IsPrimaryKey  bool
 	IsUnique      bool
 	NotNull       bool
+	HasDefault    bool
 }
 
 func (c *Catalog) LookupAttribute(attOID int64) (AttributeDetails, error) {
@@ -283,5 +288,6 @@ func (c *Catalog) LookupAttribute(attOID int64) (AttributeDetails, error) {
 		IsPrimaryKey:  r.IsPrimaryKey != 0,
 		IsUnique:      r.IsUnique != 0,
 		NotNull:       r.NotNull != 0,
+		HasDefault:    r.HasDefault != 0,
 	}, nil
 }

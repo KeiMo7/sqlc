@@ -3,6 +3,7 @@ package compiler
 import (
 	"github.com/sqlc-dev/sqlc/internal/core"
 	"github.com/sqlc-dev/sqlc/internal/metadata"
+	"github.com/sqlc-dev/sqlc/internal/nullability"
 	"github.com/sqlc-dev/sqlc/internal/sql/ast"
 	"github.com/sqlc-dev/sqlc/internal/sql/catalog"
 )
@@ -16,6 +17,7 @@ type Function struct {
 type Table struct {
 	Rel     *ast.TableName
 	Columns []*Column
+	IsView  bool
 }
 
 type Column struct {
@@ -42,6 +44,9 @@ type Column struct {
 	// arguments and nesting DataType and IsArray flatten away. It is unset
 	// on the legacy path.
 	TypeExpr *core.TypeExpr
+
+	HasDefault  bool
+	Nullability *nullability.Origin
 
 	IsSqlcSlice bool // is this sqlc.slice()
 

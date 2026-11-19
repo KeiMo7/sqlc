@@ -11,12 +11,13 @@ import (
 )
 
 type V1GenerateSettings struct {
-	Version   string              `json:"version" yaml:"version"`
-	Cloud     Cloud               `json:"cloud" yaml:"cloud"`
-	Packages  []v1PackageSettings `json:"packages" yaml:"packages"`
-	Overrides []golang.Override   `json:"overrides,omitempty" yaml:"overrides,omitempty"`
-	Rename    map[string]string   `json:"rename,omitempty" yaml:"rename,omitempty"`
-	Rules     []Rule              `json:"rules" yaml:"rules"`
+	Version     string              `json:"version" yaml:"version"`
+	Cloud       Cloud               `json:"cloud" yaml:"cloud"`
+	Packages    []v1PackageSettings `json:"packages" yaml:"packages"`
+	Overrides   []golang.Override   `json:"overrides,omitempty" yaml:"overrides,omitempty"`
+	Rename      map[string]string   `json:"rename,omitempty" yaml:"rename,omitempty"`
+	Rules       []Rule              `json:"rules" yaml:"rules"`
+	Nullability Nullability         `json:"nullability" yaml:"nullability"`
 }
 
 type v1PackageSettings struct {
@@ -122,9 +123,10 @@ func (c *V1GenerateSettings) ValidateGlobalOverrides() error {
 
 func (c *V1GenerateSettings) Translate() Config {
 	conf := Config{
-		Version: c.Version,
-		Cloud:   c.Cloud,
-		Rules:   c.Rules,
+		Version:     c.Version,
+		Cloud:       c.Cloud,
+		Rules:       c.Rules,
+		Nullability: c.Nullability,
 	}
 
 	for _, pkg := range c.Packages {

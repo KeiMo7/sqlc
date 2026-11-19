@@ -27,3 +27,12 @@ Flags:
 
 Use "sqlc [command] --help" for more information about a command.
 ```
+
+`sqlc generate` also accepts:
+
+```sh
+--nullability-explain          write an independent nullability explanation sidecar
+--nullability-out string       sidecar path (default: sqlc-nullability.json)
+--nullability-table string     only explain fields from this table (repeatable)
+--nullability-field string     only explain this field (repeatable)
+```

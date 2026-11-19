@@ -29,6 +29,19 @@ func isNotNull(n *nodes.ColumnDef) bool {
 	return false
 }
 
+func hasDefault(n *nodes.ColumnDef) bool {
+	if n.RawDefault != nil || n.CookedDefault != nil {
+		return true
+	}
+	for _, c := range n.Constraints {
+		if inner, ok := c.Node.(*nodes.Node_Constraint); ok &&
+			inner.Constraint.Contype == nodes.ConstrType_CONSTR_DEFAULT {
+			return true
+		}
+	}
+	return false
+}
+
 func makeByte(s string) byte {
 	var b byte
 	if s == "" {

@@ -1,0 +1,13 @@
+version: "2"
+nullability:
+  explain: true
+  output: "nullability.json"
+sql:
+  - engine: "postgresql"
+    schema: "schema.sql"
+    queries: "query.sql"
+    gen:
+      go:
+        package: "querytest"
+        out: "go"
+        sql_package: "pgx/v5"
