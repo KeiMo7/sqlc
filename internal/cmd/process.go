@@ -13,6 +13,7 @@ import (
 
 	"github.com/sqlc-dev/sqlc/internal/compiler"
 	"github.com/sqlc-dev/sqlc/internal/config"
+	"github.com/sqlc-dev/sqlc/internal/diagnostic"
 	"github.com/sqlc-dev/sqlc/internal/opts"
 )
 
@@ -87,7 +88,9 @@ func processQuerySets(ctx context.Context, rp ResultProcessor, conf *config.Conf
 
 			var name, lang string
 			parseOpts := opts.Parser{
-				Experiment: o.Env.Experiment,
+				Experiment:       o.Env.Experiment,
+				Diagnostics:      o.Env.Diagnostics,
+				DiagnosticFormat: o.Env.DiagnosticFormat,
 			}
 
 			switch {
@@ -112,6 +115,14 @@ func processQuerySets(ctx context.Context, rp ResultProcessor, conf *config.Conf
 			if err := rp.ProcessResult(gctx, combo, sql, result); err != nil {
 				fmt.Fprintf(errout, "# package %s\n", name)
 				fmt.Fprintf(errout, "error generating code: %s\n", err)
+				filename := ""
+				if len(sql.Queries) > 0 {
+					filename = sql.Queries[0]
+				}
+				diagnostic.NoLocation(errout, dir, filename, err.Error(), diagnostic.Config{
+					Enabled: o.Env.Diagnostics,
+					Format:  o.Env.DiagnosticFormat,
+				})
 				errored = true
 			}
 			packageRegion.End()

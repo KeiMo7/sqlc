@@ -49,6 +49,19 @@ The cache is designed after Bazel's local disk cache and has three parts:
 The entire directory is safe to delete at any time; sqlc will rebuild it as
 needed.
 
+## SQLC_DIAGNOSTICS
+
+Enables location-aware diagnostics for `sqlc generate` and `sqlc compile`.
+
+```
+SQLC_DIAGNOSTICS=1      # append text diagnostics
+SQLC_DIAGNOSTICS=json   # append one JSON object per diagnostic
+SQLC_DIAGNOSTICS=0      # explicitly disable diagnostics
+```
+
+See [Location-aware SQL diagnostics](../howto/diagnostics.md) for the output
+format and guarantees.
+
 ## SQLCDEBUG
 
 The `SQLCDEBUG` variable controls debugging variables within the runtime. It is

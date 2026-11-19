@@ -85,13 +85,14 @@ func (c *Compiler) parseCatalogLegacy(files []schemaFile, merr *multierr.Error) 
 			// A schema file and a query file are often the same file, so a
 			// query's sqlc syntax can fail here. Look for an explanation
 			// before reporting the syntax error it caused.
-			if reported := addSyntaxErrors(merr, file.name, file.contents, preprocess.File(c.conf.Engine, file.contents)); !reported {
-				merr.Add(file.name, file.contents, 0, err)
+			if reported := c.addSyntaxErrors(merr, file.name, file.contents, preprocess.File(c.conf.Engine, file.contents)); !reported {
+				merr.Add(file.name, file.contents, 0, c.enrichParseError(err))
 			}
 			continue
 		}
 
 		for i := range stmts {
+			c.rememberSchemaStatement(file, stmts[i])
 			if err := c.catalog.Update(stmts[i], c); err != nil {
 				merr.Add(file.name, file.contents, stmts[i].Pos(), err)
 				continue
@@ -117,12 +118,13 @@ func (c *Compiler) parseCatalogCore(files []schemaFile, merr *multierr.Error) er
 				// A schema file and a query file are often the same file, so a
 				// query's sqlc syntax can fail here. Look for an explanation
 				// before reporting the syntax error it caused.
-				if reported := addSyntaxErrors(merr, file.name, file.contents, preprocess.File(c.conf.Engine, file.contents)); !reported {
-					merr.Add(file.name, file.contents, 0, err)
+				if reported := c.addSyntaxErrors(merr, file.name, file.contents, preprocess.File(c.conf.Engine, file.contents)); !reported {
+					merr.Add(file.name, file.contents, 0, c.enrichParseError(err))
 				}
 				continue
 			}
 			for i := range stmts {
+				c.rememberSchemaStatement(file, stmts[i])
 				if err := coreschema.Apply(cat, stmts[i].Raw); err != nil {
 					merr.Add(file.name, file.contents, stmts[i].Pos(), err)
 					continue
@@ -183,8 +185,8 @@ func (c *Compiler) parseQueries(o opts.Parser) (*Result, error) {
 
 		parsed, err := c.parser.Parse(strings.NewReader(pp.Text))
 		if err != nil {
-			if reported := addSyntaxErrors(merr, filename, src, pp); !reported {
-				merr.Add(filename, src, 0, err)
+			if reported := c.addSyntaxErrors(merr, filename, src, pp); !reported {
+				merr.Add(filename, src, 0, c.enrichParseError(err))
 			}
 			continue
 		}
@@ -201,7 +203,8 @@ func (c *Compiler) parseQueries(o opts.Parser) (*Result, error) {
 		if err := errs[i]; err != nil {
 			var e *sqlerr.Error
 			loc := stmt.raw.Pos()
-			if errors.As(err, &e) && e.Location != 0 {
+			explicitLocation := errors.As(err, &e) && e.Location != 0
+			if explicitLocation {
 				loc = e.Location
 			}
 			// Locations are reported against the rewritten query; map them
@@ -210,6 +213,7 @@ func (c *Compiler) parseQueries(o opts.Parser) (*Result, error) {
 			if e != nil && e.Location != 0 {
 				e.Location = loc
 			}
+			err = c.enrichError(err, stmt, loc, explicitLocation)
 			merr.Add(stmt.filename, stmt.src, loc, err)
 			// If this rpc unauthenticated error bubbles up, then all future parsing/analysis will fail
 			if errors.Is(err, rpc.ErrUnauthenticated) {
@@ -281,7 +285,7 @@ func (c *Compiler) analyzeStatements(stmts []statement, o opts.Parser) ([]*Query
 	return queries, errs
 }
 
-func addSyntaxErrors(merr *multierr.Error, filename, src string, pp *preprocess.Result) bool {
+func (c *Compiler) addSyntaxErrors(merr *multierr.Error, filename, src string, pp *preprocess.Result) bool {
 	var found bool
 	for _, stmt := range pp.Statements() {
 		if stmt.Err == nil {
@@ -294,7 +298,7 @@ func addSyntaxErrors(merr *multierr.Error, filename, src string, pp *preprocess.
 			loc = pp.Origin(e.Location)
 			e.Location = loc
 		}
-		merr.Add(filename, src, loc, stmt.Err)
+		merr.Add(filename, src, loc, c.enrichParseError(stmt.Err))
 	}
 	return found
 }

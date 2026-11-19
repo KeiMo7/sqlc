@@ -34,6 +34,8 @@ func (p *Parser) Parse(r io.Reader) ([]ast.Statement, error) {
 			}
 			if perr.Offset >= 0 {
 				serr.Location = perr.Offset
+				serr.Offset = perr.Offset
+				serr.HasOffset = true
 			}
 			return nil, serr
 		}

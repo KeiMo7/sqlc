@@ -1,5 +1,7 @@
 package opts
 
 type Parser struct {
-	Experiment Experiment
+	Experiment       Experiment
+	Diagnostics      bool
+	DiagnosticFormat string
 }

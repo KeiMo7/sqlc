@@ -20,6 +20,7 @@ import (
 	"github.com/sqlc-dev/sqlc/internal/config"
 	"github.com/sqlc-dev/sqlc/internal/config/convert"
 	"github.com/sqlc-dev/sqlc/internal/debug"
+	"github.com/sqlc-dev/sqlc/internal/diagnostic"
 	"github.com/sqlc-dev/sqlc/internal/ext"
 	"github.com/sqlc-dev/sqlc/internal/ext/process"
 	"github.com/sqlc-dev/sqlc/internal/ext/wasm"
@@ -46,12 +47,8 @@ The supported version can only be "1" or "2".
 
 const errMessageNoPackages = `No packages are configured`
 
-func printFileErr(stderr io.Writer, dir string, fileErr *multierr.FileError) {
-	filename, err := filepath.Rel(dir, fileErr.Filename)
-	if err != nil {
-		filename = fileErr.Filename
-	}
-	fmt.Fprintf(stderr, "%s:%d:%d: %s\n", filename, fileErr.Line, fileErr.Column, fileErr.Err)
+func printFileErr(stderr io.Writer, dir string, fileErr *multierr.FileError, cfg diagnostic.Config) {
+	diagnostic.FileError(stderr, dir, fileErr, cfg)
 }
 
 func findPlugin(conf config.Config, name string) (*config.Plugin, error) {
@@ -270,9 +267,13 @@ func parse(ctx context.Context, name, dir string, sql config.SQL, combo config.C
 	}
 	if err := c.ParseCatalog(sql.Schema); err != nil {
 		fmt.Fprintf(stderr, "# package %s\n", name)
+		diagCfg := diagnostic.Config{
+			Enabled: parserOpts.Diagnostics,
+			Format:  parserOpts.DiagnosticFormat,
+		}
 		if parserErr, ok := err.(*multierr.Error); ok {
 			for _, fileErr := range parserErr.Errs() {
-				printFileErr(stderr, dir, fileErr)
+				printFileErr(stderr, dir, fileErr, diagCfg)
 			}
 		} else {
 			fmt.Fprintf(stderr, "error parsing schema: %s\n", err)
@@ -284,9 +285,13 @@ func parse(ctx context.Context, name, dir string, sql config.SQL, combo config.C
 	}
 	if err := c.ParseQueries(sql.Queries, parserOpts); err != nil {
 		fmt.Fprintf(stderr, "# package %s\n", name)
+		diagCfg := diagnostic.Config{
+			Enabled: parserOpts.Diagnostics,
+			Format:  parserOpts.DiagnosticFormat,
+		}
 		if parserErr, ok := err.(*multierr.Error); ok {
 			for _, fileErr := range parserErr.Errs() {
-				printFileErr(stderr, dir, fileErr)
+				printFileErr(stderr, dir, fileErr, diagCfg)
 			}
 		} else {
 			fmt.Fprintf(stderr, "error parsing queries: %s\n", err)

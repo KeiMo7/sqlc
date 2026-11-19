@@ -48,6 +48,10 @@ type Compiler struct {
 	newParser func() Parser
 
 	schema []string
+
+	diagnostics bool
+	definitions map[string]objectDefinition
+	drops       map[string]objectDefinition
 }
 
 // Option configures a Compiler.
@@ -61,7 +65,11 @@ func WithCoreAnalysis() Option {
 }
 
 func NewCompiler(conf config.SQL, combo config.CombinedSettings, parserOpts opts.Parser, options ...Option) (*Compiler, error) {
-	c := &Compiler{conf: conf, combo: combo}
+	c := &Compiler{
+		conf:        conf,
+		combo:       combo,
+		diagnostics: parserOpts.Diagnostics,
+	}
 	for _, o := range options {
 		o(c)
 	}

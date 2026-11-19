@@ -35,6 +35,7 @@ sections:
       - howto/update.md
       - howto/delete.md
       - howto/prepared_query.md
+      - howto/diagnostics.md
       - howto/transactions.md
       - howto/named_parameters.md
       - howto/ddl.md

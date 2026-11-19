@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime/trace"
+	"strings"
 
 	"github.com/cubicdaiya/gonp"
 	"github.com/spf13/cobra"
@@ -38,6 +39,8 @@ func init() {
 func Do(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
 	rootCmd := &cobra.Command{Use: "sqlc", SilenceUsage: true}
 	rootCmd.PersistentFlags().StringP("file", "f", "", "specify an alternate config file (default: sqlc.yaml)")
+	rootCmd.PersistentFlags().Bool("diagnostics", false, "append location-aware diagnostics to SQL errors")
+	rootCmd.PersistentFlags().String("diagnostics-format", "text", "diagnostic output format: text or json")
 
 	rootCmd.AddCommand(checkCmd)
 	rootCmd.AddCommand(createDBCmd)
@@ -139,15 +142,41 @@ var initCmd = &cobra.Command{
 }
 
 type Env struct {
-	DryRun     bool
-	Experiment opts.Experiment
+	DryRun           bool
+	Experiment       opts.Experiment
+	Diagnostics      bool
+	DiagnosticFormat string
 }
 
 func ParseEnv(c *cobra.Command) Env {
 	dr := c.Flag("dry-run")
+	diag := c.Flag("diagnostics")
+	format := c.Flag("diagnostics-format")
+	enabled := diag != nil && diag.Value.String() == "true"
+	diagnosticFormat := "text"
+	if format != nil && format.Value.String() != "" {
+		diagnosticFormat = format.Value.String()
+	}
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("SQLC_DIAGNOSTICS"))) {
+	case "1", "true", "text":
+		enabled = true
+	case "json":
+		enabled = true
+		diagnosticFormat = "json"
+	case "0", "false", "off":
+		enabled = false
+	}
+	if diag != nil && diag.Changed {
+		enabled = diag.Value.String() == "true"
+	}
+	if diagnosticFormat == "json" {
+		enabled = true
+	}
 	return Env{
-		DryRun:     dr != nil && dr.Changed,
-		Experiment: opts.ExperimentFromEnv(),
+		DryRun:           dr != nil && dr.Changed,
+		Experiment:       opts.ExperimentFromEnv(),
+		Diagnostics:      enabled,
+		DiagnosticFormat: diagnosticFormat,
 	}
 }
 

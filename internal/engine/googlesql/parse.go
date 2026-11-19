@@ -3,12 +3,14 @@ package googlesql
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 
 	"github.com/sqlc-dev/zetajones/parser"
 
 	"github.com/sqlc-dev/sqlc/internal/source"
 	"github.com/sqlc-dev/sqlc/internal/sql/ast"
+	"github.com/sqlc-dev/sqlc/internal/sql/sqlerr"
 )
 
 func NewParser() *Parser {
@@ -26,7 +28,7 @@ func (p *Parser) Parse(r io.Reader) ([]ast.Statement, error) {
 	ctx := context.Background()
 	stmtNodes, err := parser.Parse(ctx, bytes.NewReader(blob))
 	if err != nil {
-		return nil, err
+		return nil, normalizeErr(err)
 	}
 
 	// zetajones node locations are byte offsets into the input. Following the
@@ -58,6 +60,18 @@ func (p *Parser) Parse(r io.Reader) ([]ast.Statement, error) {
 	}
 
 	return stmts, nil
+}
+
+func normalizeErr(err error) error {
+	var perr *parser.Error
+	if errors.As(err, &perr) {
+		return &sqlerr.Error{
+			Message:   perr.Message,
+			Offset:    perr.Offset,
+			HasOffset: perr.Offset >= 0 && perr.Offset <= len(perr.SQL),
+		}
+	}
+	return err
 }
 
 // https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#comments

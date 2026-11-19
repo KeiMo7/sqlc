@@ -31,6 +31,9 @@ func (c *Compiler) parseQuery(stmt ast.Node, pp *preprocess.Result, o opts.Parse
 	if pre.Err != nil {
 		return nil, pre.Err
 	}
+	if err := c.prepareDiagnostics(raw); err != nil {
+		return nil, err
+	}
 
 	// Engines number bind parameters in whatever order they convert the AST.
 	// Restore the numbering the preprocessor assigned in source order.

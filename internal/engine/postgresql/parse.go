@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	nodes "github.com/sqlc-dev/oliphant"
 	"github.com/sqlc-dev/oliphant/parser"
@@ -168,7 +169,7 @@ func (p *Parser) ParseFile(r io.Reader) (*ast.File, error) {
 	contents := string(blob)
 	parsed, err := parser.ParseFile(contents)
 	if err != nil {
-		pErr := normalizeErr(err)
+		pErr := normalizeErr(err, contents)
 		return nil, pErr
 	}
 	tree := parsed.ParseResult
@@ -245,7 +246,7 @@ func ownLine(src string, pos int) bool {
 	return true
 }
 
-func normalizeErr(err error) error {
+func normalizeErr(err error, src string) error {
 	//TODO: errors.As complains that *parser.Error does not implement error
 	if pErr, ok := err.(*parser.Error); ok {
 		sErr := &sqlerr.Error{
@@ -254,10 +255,29 @@ func normalizeErr(err error) error {
 			Line:     pErr.Lineno,
 			Location: pErr.Cursorpos,
 		}
+		if pErr.Cursorpos > 0 {
+			sErr.Offset = cursorByteOffset(src, pErr.Cursorpos)
+			sErr.HasOffset = true
+		}
 		return sErr
 	}
 
 	return err
+}
+
+// cursorByteOffset converts PostgreSQL's 1-based character cursor position
+// into a byte offset. Cursorpos counts characters, not bytes, so a UTF-8
+// query needs the input to locate the byte boundary.
+func cursorByteOffset(src string, cursor int) int {
+	if cursor <= 1 {
+		return 0
+	}
+	offset := 0
+	for n := 1; n < cursor && offset < len(src); n++ {
+		_, size := utf8.DecodeRuneInString(src[offset:])
+		offset += size
+	}
+	return offset
 }
 
 // https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-COMMENTS

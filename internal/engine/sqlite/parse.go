@@ -143,9 +143,11 @@ func normalizeErr(err error) error {
 		return errors.New(perr.Message)
 	}
 	return &sqlerr.Error{
-		Message: perr.Message,
-		Line:    line,
-		Column:  column,
+		Message:   perr.Message,
+		Line:      line,
+		Column:    column,
+		Offset:    perr.Offset,
+		HasOffset: perr.Offset >= 0 && perr.Offset <= len(perr.SQL),
 	}
 }
 
